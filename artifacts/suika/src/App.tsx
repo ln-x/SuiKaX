@@ -3,14 +3,25 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useGetMe } from "@workspace/api-client-react";
-import { AuthScreen } from "./components/AuthScreen";
-import { EarthTab } from "./components/EarthTab";
-import { LocalTab } from "./components/LocalTab";
-import { ActionTab } from "./components/ActionTab";
-import { HealthTab } from "./components/HealthTab";
-import { InsightsTab } from "./components/InsightsTab";
 import { Globe, TreeDeciduous, Play, Heart, BarChart2, House } from "lucide-react";
 import { useTranslation } from "./lib/i18n";
+
+const AuthScreen  = React.lazy(() => import("./components/AuthScreen").then((m) => ({ default: m.AuthScreen })));
+const EarthTab    = React.lazy(() => import("./components/EarthTab").then((m) => ({ default: m.EarthTab })));
+const LocalTab    = React.lazy(() => import("./components/LocalTab").then((m) => ({ default: m.LocalTab })));
+const ActionTab   = React.lazy(() => import("./components/ActionTab").then((m) => ({ default: m.ActionTab })));
+const HealthTab   = React.lazy(() => import("./components/HealthTab").then((m) => ({ default: m.HealthTab })));
+const InsightsTab = React.lazy(() => import("./components/InsightsTab").then((m) => ({ default: m.InsightsTab })));
+
+function TabFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-[40vh]">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-3 h-3 rounded-full bg-primary animate-pulse" />
+      </div>
+    </div>
+  );
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -76,7 +87,11 @@ function MainApp() {
   }
 
   if (view === "auth") {
-    return <AuthScreen onSuccess={() => refetch()} />;
+    return (
+      <React.Suspense fallback={<TabFallback />}>
+        <AuthScreen onSuccess={() => refetch()} />
+      </React.Suspense>
+    );
   }
 
   const renderTab = () => {
@@ -118,7 +133,9 @@ function MainApp() {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto animate-in fade-in">
-          {renderTab()}
+          <React.Suspense fallback={<TabFallback />}>
+            {renderTab()}
+          </React.Suspense>
         </div>
       )}
 
