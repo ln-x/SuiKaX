@@ -24,7 +24,7 @@ function useNasaEpic() {
         if (!data?.length) return;
         const img = data[0];
         const d = img.date.slice(0, 10).replace(/-/g, "/");
-        const url = `https://epic.gsfc.nasa.gov/archive/natural/${d}/png/${img.image}.png`;
+        const url = `https://epic.gsfc.nasa.gov/archive/natural/${d}/jpg/${img.image}.jpg`;
         setEpic({ url, date: img.date.slice(0, 10) });
       })
       .catch(() => {});
@@ -32,7 +32,7 @@ function useNasaEpic() {
   return epic;
 }
 
-// ── Ecosystem cards ───────────────────────────────────────────────────────────
+// ── Ecosystem cards ────────────────────────────────────────────────────────────
 const ECOSYSTEMS = [
   {
     id: "arctic",
@@ -70,9 +70,21 @@ const ECOSYSTEMS = [
       { label: "Carbon role", value: "Net source" },
     ],
   },
+  {
+    id: "landseal",
+    name: "Global Land Sealing",
+    status: "Accelerating urban sprawl",
+    color: "#E8A25C",
+    icon: "🏗️",
+    metrics: [
+      { label: "Europe", value: "∘2.4%/decade" },
+      { label: "East Asia", value: "∘4.1%/decade" },
+      { label: "Global area", value: "~1.6%" },
+    ],
+  },
 ] as const;
 
-// ── Event type config ─────────────────────────────────────────────────────────
+// ── Event type config ─────────────────────────────────────────────────────
 const TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
   earthquake: { label: "Earthquake", icon: <Mountain size={14} />, color: "#FF9500" },
   flood:      { label: "Flood",      icon: <Droplets size={14} />, color: "#4FC3F7" },
@@ -101,7 +113,7 @@ function relativeTime(iso: string): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-// ── Event card ────────────────────────────────────────────────────────────────
+// ── Event card ──────────────────────────────────────────────────────────────────
 function EventCard({ item }: { item: EarthEvent }) {
   const [expanded, setExpanded] = useState(false);
   const cfg = TYPE_CONFIG[item.type ?? "other"] ?? TYPE_CONFIG.other;
@@ -173,7 +185,7 @@ function EventCard({ item }: { item: EarthEvent }) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Main component ──────────────────────────────────────────────────────────────────
 export function EarthTab() {
   const [filter, setFilter] = useState<FilterType>("all");
   const [showAll, setShowAll] = useState(false);
@@ -213,40 +225,6 @@ export function EarthTab() {
         </div>
       </div>
 
-      {/* Ecosystem voices */}
-      <div className="px-4 pt-5 pb-1">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          Ecosystem Voices
-        </h3>
-      </div>
-      <div className="flex gap-3 px-4 overflow-x-auto pb-1 scrollbar-none shrink-0">
-        {ECOSYSTEMS.map((eco) => (
-          <div
-            key={eco.id}
-            className="shrink-0 w-56 rounded-xl p-4 border border-border/40"
-            style={{ backgroundColor: eco.color + "0f" }}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-lg">{eco.icon}</span>
-              <div>
-                <p className="text-xs font-semibold" style={{ color: eco.color }}>{eco.name}</p>
-                <p className="text-xs text-muted-foreground">{eco.status}</p>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              {eco.metrics.map((m) => (
-                <div key={m.label} className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">{m.label}</span>
-                  <span className="text-xs font-semibold tabular-nums" style={{ color: eco.color }}>
-                    {m.value}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-
       {/* Live events */}
       <div className="flex items-center justify-between px-4 pt-5 pb-2 shrink-0">
         <div>
@@ -255,7 +233,7 @@ export function EarthTab() {
           </h3>
           {allItems.length > 0 && (
             <p className="text-xs text-muted-foreground mt-0.5">
-              {allItems.length} events · GDACS · USGS · NASA EONET · WHO · NWS
+              {allItems.length} events · USGS · NWS · NASA EONET · GVP · WHO
             </p>
           )}
         </div>
@@ -340,6 +318,40 @@ export function EarthTab() {
               : `Show ${filtered.length - 6} more events`}
           </button>
         )}
+      </div>
+
+      {/* Ecosystem voices — placed below events because it's the least frequently updated */}
+      <div className="px-4 pt-5 pb-1">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          Ecosystem Voices
+        </h3>
+      </div>
+      <div className="flex gap-3 px-4 overflow-x-auto pb-1 scrollbar-none shrink-0">
+        {ECOSYSTEMS.map((eco) => (
+          <div
+            key={eco.id}
+            className="shrink-0 w-56 rounded-xl p-4 border border-border/40"
+            style={{ backgroundColor: eco.color + "0f" }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-lg">{eco.icon}</span>
+              <div>
+                <p className="text-xs font-semibold" style={{ color: eco.color }}>{eco.name}</p>
+                <p className="text-xs text-muted-foreground">{eco.status}</p>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              {eco.metrics.map((m) => (
+                <div key={m.label} className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">{m.label}</span>
+                  <span className="text-xs font-semibold tabular-nums" style={{ color: eco.color }}>
+                    {m.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -21,12 +21,111 @@ function classifyType(title: string): string {
   return "other";
 }
 
-async function fetchGdacs(): Promise<unknown[]> {
+// ── NWS Flood Alerts ─────────────────────────────────────────────────────────
+async function fetchNwsFloods(): Promise<unknown[]> {
   try {
-    const resp = await fetch("https://www.gdacs.org/xml/rss.xml", {
-      headers: { "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)" },
+    const resp = await fetch(
+      "https://api.weather.gov/alerts/active?event=Flood%20Warning,Flash%20Flood%20Warning,Flood%20Watch",
+      {
+        headers: {
+          Accept: "application/geo+json",
+          "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)",
+        },
+      },
+    );
+    const json = await resp.json() as {
+      features?: Array<{
+        id: string;
+        properties: {
+          event?: string;
+          headline?: string;
+          areaDesc?: string;
+          sent?: string;
+          severity?: string;
+          description?: string;
+        };
+      }>;
+    };
+    return (json.features ?? []).map((f) => {
+      const p = f.properties;
+      const sev = (p.severity ?? "").toLowerCase();
+      const severity = sev === "extreme" || sev === "severe" ? "high" : "medium";
+      return {
+        id: `nws-flood-${f.id}`,
+        title: p.headline || p.event || "Flood Alert",
+        type: "flood",
+        severity,
+        source: "NWS",
+        publishedAt: p.sent ?? new Date().toISOString(),
+        description: p.description ?? null,
+        countries: p.areaDesc ? [p.areaDesc] : [],
+        url: "https://www.weather.gov/alerts",
+      };
     });
-    const text = await resp.text();
+  } catch (err) {
+    logger.warn({ err }, "Failed to fetch NWS flood alerts");
+    return [];
+  }
+}
+
+// ── NWS Severe Weather Alerts ────────────────────────────────────────────────
+async function fetchNwsStorms(): Promise<unknown[]> {
+  try {
+    const resp = await fetch(
+      "https://api.weather.gov/alerts/active?event=Severe%20Thunderstorm%20Warning,Severe%20Thunderstorm%20Watch,Tornado%20Warning,Tornado%20Watch",
+      {
+        headers: {
+          Accept: "application/geo+json",
+          "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)",
+        },
+      },
+    );
+    const json = await resp.json() as {
+      features?: Array<{
+        id: string;
+        properties: {
+          event?: string;
+          headline?: string;
+          areaDesc?: string;
+          sent?: string;
+          severity?: string;
+          description?: string;
+        };
+      }>;
+    };
+    return (json.features ?? []).map((f) => {
+      const p = f.properties;
+      const sev = (p.severity ?? "").toLowerCase();
+      const severity = sev === "extreme" || sev === "severe" ? "high" : "medium";
+      return {
+        id: `nws-storm-${f.id}`,
+        title: p.headline || p.event || "Severe Weather Alert",
+        type: "storm",
+        severity,
+        source: "NWS",
+        publishedAt: p.sent ?? new Date().toISOString(),
+        description: p.description ?? null,
+        countries: p.areaDesc ? [p.areaDesc] : [],
+        url: "https://www.weather.gov/alerts",
+      };
+    });
+  } catch (err) {
+    logger.warn({ err }, "Failed to fetch NWS severe weather alerts");
+    return [];
+  }
+}
+
+// ── Smithsonian GVP Weekly Volcanic Activity Report ─────────────────────────
+async function fetchGvpVolcanoes(): Promise<unknown[]> {
+  try {
+    const resp = await fetch("https://volcano.si.edu/news/WeeklyVolcanoRSS.xml", {
+      headers: {
+        Accept: "application/rss+xml",
+        "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)",
+      },
+    });
+    const ab = await resp.arrayBuffer();
+    const text = new TextDecoder("latin1").decode(ab);
     const items: unknown[] = [];
     const itemRegex = /<item>([\s\S]*?)<\/item>/g;
     let match;
@@ -36,28 +135,24 @@ async function fetchGdacs(): Promise<unknown[]> {
         const m = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`).exec(content);
         return m ? m[1].replace(/<!\[CDATA\[|\]\]>/g, "").trim() : null;
       };
-      const title = get("title") ?? "Unknown Event";
+      const title = get("title") ?? "Unknown Volcano Activity";
       const pubDate = get("pubDate");
       const link = get("link");
-      const alertLevel = get("gdacs:alertlevel")?.toLowerCase() ?? "";
-      let severity = "medium";
-      if (alertLevel.includes("red") || alertLevel.includes("orange")) severity = "high";
-      else if (alertLevel.includes("green")) severity = "low";
       items.push({
-        id: `gdacs-${createHash("md5").update(link ?? title).digest("hex")}`,
+        id: `gvp-${createHash("md5").update(link ?? title).digest("hex")}`,
         title,
-        type: classifyType(title),
-        severity,
-        source: "GDACS",
+        type: "volcano",
+        severity: "high",
+        source: "Smithsonian GVP",
         publishedAt: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
-        description: get("description"),
+        description: get("description") || null,
         countries: [],
         url: link,
       });
     }
     return items;
   } catch (err) {
-    logger.warn({ err }, "Failed to fetch GDACS feed");
+    logger.warn({ err }, "Failed to fetch GVP volcano report");
     return [];
   }
 }
@@ -76,10 +171,10 @@ const EONET_CATEGORY_MAP: Record<string, string> = {
   snow: "other",
 };
 
-async function fetchEonet(): Promise<unknown[]> {
+async function fetchEonetOpen(days: number, limit: number): Promise<unknown[]> {
   try {
     const resp = await fetch(
-      "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=360&limit=30",
+      `https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=${days}&limit=${limit}`,
       {
         headers: {
           Accept: "application/json",
@@ -116,7 +211,52 @@ async function fetchEonet(): Promise<unknown[]> {
       };
     });
   } catch (err) {
-    logger.warn({ err }, "Failed to fetch NASA EONET events");
+    logger.warn({ err }, "Failed to fetch NASA EONET open events");
+    return [];
+  }
+}
+
+async function fetchEonetClosed(category: string, days: number, limit: number): Promise<unknown[]> {
+  try {
+    const resp = await fetch(
+      `https://eonet.gsfc.nasa.gov/api/v3/events?category=${category}&status=closed&days=${days}&limit=${limit}`,
+      {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)",
+        },
+      },
+    );
+    const json = await resp.json() as {
+      events?: Array<{
+        id: string;
+        title: string;
+        link?: string;
+        categories?: Array<{ id: string; title: string }>;
+        sources?: Array<{ id: string; url: string }>;
+        geometry?: Array<{ date?: string }>;
+      }>;
+    };
+    return (json.events ?? []).map((e) => {
+      const catId = e.categories?.[0]?.id ?? "";
+      const type = EONET_CATEGORY_MAP[catId] ?? classifyType(e.title);
+      const geos = e.geometry ?? [];
+      const latest = geos.length > 0 ? geos[geos.length - 1] : undefined;
+      const url = e.sources?.[0]?.url ?? e.link ?? null;
+      return {
+        id: `eonet-${e.id}`,
+        title: e.title,
+        type,
+        severity: type === "wildfire" || type === "storm" || type === "volcano" ? "high" : "medium",
+        source: "NASA EONET",
+        publishedAt: latest?.date ?? new Date().toISOString(),
+        description: (e.categories ?? []).map((c) => c.title).join(", ") || null,
+        countries: [],
+        url,
+      };
+    });
+  } catch (err) {
+    logger.warn({ err }, "Failed to fetch NASA EONET closed events");
     return [];
   }
 }
@@ -249,14 +389,29 @@ router.get("/earth-feeds", requireAuth, async (req, res): Promise<void> => {
     res.json(cache.data);
     return;
   }
-  const [gdacs, usgs, eonet, who, tsunami] = await Promise.all([
-    fetchGdacs(),
-    fetchUsgs(),
-    fetchEonet(),
-    fetchWho(),
-    fetchTsunami(),
-  ]);
-  const combined = [...gdacs, ...usgs, ...eonet, ...who, ...tsunami].sort(
+  const [usgs, nwsFloods, nwsStorms, gvp, eonetOpen, eonetClosedFloods, eonetClosedStorms, who, tsunami] =
+    await Promise.all([
+      fetchUsgs(),
+      fetchNwsFloods(),
+      fetchNwsStorms(),
+      fetchGvpVolcanoes(),
+      fetchEonetOpen(30, 30),
+      fetchEonetClosed("floods", 730, 20),
+      fetchEonetClosed("severeStorms", 360, 15),
+      fetchWho(),
+      fetchTsunami(),
+    ]);
+  const combined = [
+    ...usgs,
+    ...nwsFloods,
+    ...nwsStorms,
+    ...gvp,
+    ...eonetOpen,
+    ...eonetClosedFloods,
+    ...eonetClosedStorms,
+    ...who,
+    ...tsunami,
+  ].sort(
     (a, b) =>
       new Date((b as { publishedAt: string }).publishedAt).getTime() -
       new Date((a as { publishedAt: string }).publishedAt).getTime(),

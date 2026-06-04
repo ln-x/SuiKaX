@@ -47,9 +47,61 @@ function classify_type(string $title): string {
     return 'other';
 }
 
-// ── GDACS ─────────────────────────────────────────────────────────────────────
-function fetch_gdacs(): array {
-    $xml = http_get('https://www.gdacs.org/xml/rss.xml');
+// ── NWS Flood Alerts ──────────────────────────────────────────────────────────
+function fetch_nws_floods(): array {
+    $raw = http_get('https://api.weather.gov/alerts/active?event=Flood%20Warning,Flash%20Flood%20Warning,Flood%20Watch');
+    if (!$raw) return [];
+    $data = json_decode($raw, true);
+    $out  = [];
+    foreach ($data['features'] ?? [] as $f) {
+        $p = $f['properties'] ?? [];
+        $sev = strtolower($p['severity'] ?? '');
+        $severity = ($sev === 'extreme' || $sev === 'severe') ? 'high' : 'medium';
+        $title = ($p['headline'] ?? '') ?: (($p['event'] ?? '') ?: 'Flood Alert');
+        $out[] = [
+            'id'          => 'nws-flood-' . ($f['id'] ?? md5($title . ($p['sent'] ?? ''))),
+            'title'       => $title,
+            'type'        => 'flood',
+            'severity'    => $severity,
+            'source'      => 'NWS',
+            'publishedAt' => $p['sent'] ?? gmdate('c'),
+            'description' => $p['description'] ?? null,
+            'countries'   => isset($p['areaDesc']) ? [$p['areaDesc']] : [],
+            'url'         => 'https://www.weather.gov/alerts',
+        ];
+    }
+    return $out;
+}
+
+// ── NWS Severe Weather Alerts ─────────────────────────────────────────────────
+function fetch_nws_storms(): array {
+    $raw = http_get('https://api.weather.gov/alerts/active?event=Severe%20Thunderstorm%20Warning,Severe%20Thunderstorm%20Watch,Tornado%20Warning,Tornado%20Watch');
+    if (!$raw) return [];
+    $data = json_decode($raw, true);
+    $out  = [];
+    foreach ($data['features'] ?? [] as $f) {
+        $p = $f['properties'] ?? [];
+        $sev = strtolower($p['severity'] ?? '');
+        $severity = ($sev === 'extreme' || $sev === 'severe') ? 'high' : 'medium';
+        $title = ($p['headline'] ?? '') ?: (($p['event'] ?? '') ?: 'Severe Weather Alert');
+        $out[] = [
+            'id'          => 'nws-storm-' . ($f['id'] ?? md5($title . ($p['sent'] ?? ''))),
+            'title'       => $title,
+            'type'        => 'storm',
+            'severity'    => $severity,
+            'source'      => 'NWS',
+            'publishedAt' => $p['sent'] ?? gmdate('c'),
+            'description' => $p['description'] ?? null,
+            'countries'   => isset($p['areaDesc']) ? [$p['areaDesc']] : [],
+            'url'         => 'https://www.weather.gov/alerts',
+        ];
+    }
+    return $out;
+}
+
+// ── Smithsonian GVP Weekly Volcanic Activity Report ───────────────────────────
+function fetch_gvp(): array {
+    $xml = http_get('https://volcano.si.edu/news/WeeklyVolcanoRSS.xml');
     if (!$xml) return [];
     $out = [];
     preg_match_all('/<item>([\s\S]*?)<\/item>/', $xml, $matches);
@@ -58,21 +110,17 @@ function fetch_gdacs(): array {
             if (!preg_match('/<' . preg_quote($tag, '/') . '[^>]*>([\s\S]*?)<\/' . preg_quote($tag, '/') . '>/', $content, $m)) return null;
             return trim(preg_replace('/<!\[CDATA\[|\]\]>/', '', $m[1]));
         };
-        $title    = $get('title') ?? 'Unknown Event';
-        $link     = $get('link');
-        $pubDate  = $get('pubDate');
-        $alert    = strtolower($get('gdacs:alertlevel') ?? '');
-        $severity = 'medium';
-        if (str_contains($alert, 'red') || str_contains($alert, 'orange')) $severity = 'high';
-        elseif (str_contains($alert, 'green'))                              $severity = 'low';
+        $title   = $get('title') ?? 'Unknown Volcano Activity';
+        $link    = $get('link');
+        $pubDate = $get('pubDate');
         $out[] = [
-            'id'          => 'gdacs-' . md5($link ?? $title),
+            'id'          => 'gvp-' . md5($link ?? $title),
             'title'       => $title,
-            'type'        => classify_type($title),
-            'severity'    => $severity,
-            'source'      => 'GDACS',
+            'type'        => 'volcano',
+            'severity'    => 'high',
+            'source'      => 'Smithsonian GVP',
             'publishedAt' => $pubDate ? gmdate('c', strtotime($pubDate)) : gmdate('c'),
-            'description' => $get('description'),
+            'description' => $get('description') ?: null,
             'countries'   => [],
             'url'         => $link,
         ];
@@ -111,11 +159,7 @@ function fetch_usgs(): array {
     return $out;
 }
 
-// ── NASA EONET (Earth Observatory Natural Event Tracker) ──────────────────────
-function fetch_eonet(): array {
-    $raw = http_get('https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=360&limit=30');
-    if (!$raw) return [];
-    $data = json_decode($raw, true);
+function _eonet_map(array $e): array {
     $catMap = [
         'wildfires'    => 'wildfire',
         'severeStorms' => 'storm',
@@ -129,26 +173,46 @@ function fetch_eonet(): array {
         'tempExtremes' => 'other',
         'snow'         => 'other',
     ];
+    $catId  = $e['categories'][0]['id'] ?? '';
+    $type   = $catMap[$catId] ?? classify_type($e['title'] ?? '');
+    $geos   = $e['geometry'] ?? [];
+    $latest = !empty($geos) ? end($geos) : null;
+    $url    = $e['sources'][0]['url'] ?? ($e['link'] ?? null);
+    $catTitles = array_map(fn($c) => $c['title'] ?? '', $e['categories'] ?? []);
+    $severity = in_array($type, ['wildfire', 'storm', 'volcano'], true) ? 'high' : 'medium';
+    return [
+        'id'          => 'eonet-' . ($e['id'] ?? md5($e['title'] ?? '')),
+        'title'       => $e['title'] ?? 'Unknown Event',
+        'type'        => $type,
+        'severity'    => $severity,
+        'source'      => 'NASA EONET',
+        'publishedAt' => isset($latest['date']) ? gmdate('c', strtotime($latest['date'])) : gmdate('c'),
+        'description' => implode(', ', array_filter($catTitles)) ?: null,
+        'countries'   => [],
+        'url'         => $url,
+    ];
+}
+
+// ── NASA EONET open events ────────────────────────────────────────────────────
+function fetch_eonet_open(int $days, int $limit): array {
+    $raw = http_get("https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days={$days}&limit={$limit}");
+    if (!$raw) return [];
+    $data = json_decode($raw, true);
     $out = [];
     foreach ($data['events'] ?? [] as $e) {
-        $catId  = $e['categories'][0]['id'] ?? '';
-        $type   = $catMap[$catId] ?? classify_type($e['title'] ?? '');
-        $geos   = $e['geometry'] ?? [];
-        $latest = !empty($geos) ? end($geos) : null;
-        $url    = $e['sources'][0]['url'] ?? ($e['link'] ?? null);
-        $catTitles = array_map(fn($c) => $c['title'] ?? '', $e['categories'] ?? []);
-        $severity = in_array($type, ['wildfire', 'storm', 'volcano'], true) ? 'high' : 'medium';
-        $out[] = [
-            'id'          => 'eonet-' . ($e['id'] ?? md5($e['title'] ?? '')),
-            'title'       => $e['title'] ?? 'Unknown Event',
-            'type'        => $type,
-            'severity'    => $severity,
-            'source'      => 'NASA EONET',
-            'publishedAt' => isset($latest['date']) ? gmdate('c', strtotime($latest['date'])) : gmdate('c'),
-            'description' => implode(', ', array_filter($catTitles)) ?: null,
-            'countries'   => [],
-            'url'         => $url,
-        ];
+        $out[] = _eonet_map($e);
+    }
+    return $out;
+}
+
+// ── NASA EONET closed events by category ─────────────────────────────────────
+function fetch_eonet_closed(string $category, int $days, int $limit): array {
+    $raw = http_get("https://eonet.gsfc.nasa.gov/api/v3/events?category={$category}&status=closed&days={$days}&limit={$limit}");
+    if (!$raw) return [];
+    $data = json_decode($raw, true);
+    $out = [];
+    foreach ($data['events'] ?? [] as $e) {
+        $out[] = _eonet_map($e);
     }
     return $out;
 }
@@ -204,13 +268,19 @@ function fetch_tsunami(): array {
     return $out;
 }
 
-$gdacs   = fetch_gdacs();
-$usgs    = fetch_usgs();
-$eonet   = fetch_eonet();
-$who     = fetch_who();
-$tsunami = fetch_tsunami();
+$usgs         = fetch_usgs();
+$nws_floods   = fetch_nws_floods();
+$nws_storms   = fetch_nws_storms();
+$gvp          = fetch_gvp();
+$eonet_open   = fetch_eonet_open(30, 30);
+$eonet_closed = array_merge(
+    fetch_eonet_closed('floods', 730, 20),
+    fetch_eonet_closed('severeStorms', 360, 15),
+);
+$who          = fetch_who();
+$tsunami      = fetch_tsunami();
 
-$combined = array_merge($gdacs, $usgs, $eonet, $who, $tsunami);
+$combined = array_merge($usgs, $nws_floods, $nws_storms, $gvp, $eonet_open, $eonet_closed, $who, $tsunami);
 usort($combined, fn($a, $b) => strtotime($b['publishedAt']) - strtotime($a['publishedAt']));
 
 $json = json_encode($combined, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
