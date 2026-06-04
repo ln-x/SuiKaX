@@ -24,7 +24,7 @@ STAGING_DIR="$REPO_ROOT/.deploy-staging"
 OUT_ZIP="$REPO_ROOT/suika-deploy.zip"
 
 echo "==> Building SuiKa frontend (production)..."
-PORT=3000 BASE_PATH=/ pnpm --filter @workspace/suika run build
+BASE_PATH=/ pnpm --filter @workspace/suika run build
 
 echo ""
 echo "==> Staging deployment files..."
