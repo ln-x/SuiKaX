@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "SuiKa — Burnout Recovery Companion"
+version = "1.0.0"
+id = "artifacts/suika"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22797
+
+[services.development]
+run = "pnpm --filter @workspace/suika run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/suika", "run", "build" ]
+publicDir = "artifacts/suika/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22797"
+BASE_PATH = "/"

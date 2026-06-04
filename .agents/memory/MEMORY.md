@@ -1,0 +1,2 @@
+- [Orval hook options pattern](orval-hook-options.md) — Orval-generated hooks take `{ query?: UseQueryOptions }` wrapper, never bare options
+- [SuiKa type gotchas](suika-type-gotchas.md) — real generated schema field names differ significantly from assumed names

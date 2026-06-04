@@ -3,13 +3,34 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: SuiKa Burnout Recovery Companion API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: health-logs
+    description: Daily health logs
+  - name: sessions
+    description: Timer sessions
+  - name: presets
+    description: Timer presets
+  - name: categories
+    description: Activity categories
+  - name: stress-factors
+    description: Stress factors
+  - name: regulation
+    description: Regulation strategies and logs
+  - name: environment
+    description: Environment snapshots
+  - name: earth
+    description: Earth and global event feeds
+  - name: user
+    description: User account operations
+
 paths:
   /healthz:
     get:
@@ -24,6 +45,569 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthCredentials"
+      responses:
+        "201":
+          description: Registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Username taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthCredentials"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current session user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/account:
+    delete:
+      operationId: deleteAccount
+      tags: [auth]
+      summary: Delete account and all data
+      responses:
+        "200":
+          description: Account deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /health-logs:
+    get:
+      operationId: getHealthLogs
+      tags: [health-logs]
+      summary: Get health logs
+      responses:
+        "200":
+          description: List of health logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HealthLog"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: saveHealthLog
+      tags: [health-logs]
+      summary: Save or update today health log
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HealthLogInput"
+      responses:
+        "200":
+          description: Health log saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthLog"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions:
+    get:
+      operationId: getSessions
+      tags: [sessions]
+      summary: Get timer sessions
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TimerSession"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createSession
+      tags: [sessions]
+      summary: Save a completed timer session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TimerSessionInput"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimerSession"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{id}:
+    patch:
+      operationId: updateSession
+      tags: [sessions]
+      summary: Update session connection reflection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TimerSessionUpdate"
+      responses:
+        "200":
+          description: Session updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimerSession"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /presets:
+    get:
+      operationId: getPresets
+      tags: [presets]
+      summary: Get timer presets
+      responses:
+        "200":
+          description: List of presets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Preset"
+    post:
+      operationId: createPreset
+      tags: [presets]
+      summary: Create a preset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PresetInput"
+      responses:
+        "201":
+          description: Preset created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preset"
+
+  /presets/{id}:
+    delete:
+      operationId: deletePreset
+      tags: [presets]
+      summary: Delete a preset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /categories:
+    get:
+      operationId: getCategories
+      tags: [categories]
+      summary: Get custom activity categories
+      responses:
+        "200":
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+    post:
+      operationId: createCategory
+      tags: [categories]
+      summary: Create a custom category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+      responses:
+        "201":
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+
+  /categories/{id}:
+    delete:
+      operationId: deleteCategory
+      tags: [categories]
+      summary: Delete a custom category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /stress-factors:
+    get:
+      operationId: getStressFactors
+      tags: [stress-factors]
+      summary: Get stress factors
+      responses:
+        "200":
+          description: List of stress factors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StressFactor"
+    post:
+      operationId: createStressFactor
+      tags: [stress-factors]
+      summary: Create a stress factor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StressFactorInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StressFactor"
+
+  /stress-factors/{id}:
+    delete:
+      operationId: deleteStressFactor
+      tags: [stress-factors]
+      summary: Delete a stress factor
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /regulation-strategies:
+    get:
+      operationId: getRegulationStrategies
+      tags: [regulation]
+      summary: Get regulation strategies
+      responses:
+        "200":
+          description: List of strategies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RegulationStrategy"
+    post:
+      operationId: createRegulationStrategy
+      tags: [regulation]
+      summary: Create a regulation strategy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegulationStrategyInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegulationStrategy"
+
+  /regulation-strategies/{id}:
+    delete:
+      operationId: deleteRegulationStrategy
+      tags: [regulation]
+      summary: Delete a regulation strategy
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /regulation-log:
+    get:
+      operationId: getRegulationLog
+      tags: [regulation]
+      summary: Get today regulation log
+      responses:
+        "200":
+          description: Today regulation log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegulationLog"
+    post:
+      operationId: saveRegulationLog
+      tags: [regulation]
+      summary: Save today regulation log (toggle strategies)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegulationLogInput"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegulationLog"
+
+  /environment-snapshots:
+    get:
+      operationId: getEnvironmentSnapshots
+      tags: [environment]
+      summary: Get environment snapshots
+      responses:
+        "200":
+          description: List of snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EnvironmentSnapshot"
+    post:
+      operationId: saveEnvironmentSnapshot
+      tags: [environment]
+      summary: Save an environment snapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnvironmentSnapshotInput"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvironmentSnapshot"
+
+  /earth-feeds:
+    get:
+      operationId: getEarthFeeds
+      tags: [earth]
+      summary: Get live GDACS and ReliefWeb global event feeds
+      responses:
+        "200":
+          description: Global events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EarthEvent"
+
+  /user/location:
+    patch:
+      operationId: updateUserLocation
+      tags: [user]
+      summary: Update user default location
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserLocationUpdate"
+      responses:
+        "200":
+          description: Location updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /my-data:
+    get:
+      operationId: getMyData
+      tags: [user]
+      summary: Get all user data grouped by table
+      responses:
+        "200":
+          description: All user data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyData"
+
+  /my-data/{table}/{id}:
+    delete:
+      operationId: deleteMyDataRecord
+      tags: [user]
+      summary: Delete a single data record
+      parameters:
+        - name: table
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /insights/stats:
+    get:
+      operationId: getInsightStats
+      tags: [health-logs]
+      summary: Get aggregated insight statistics across all logs
+      responses:
+        "200":
+          description: Insight statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightStats"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +618,438 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    AuthCredentials:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+
+    User:
+      type: object
+      required: [id, username]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        displayName:
+          type: ["string", "null"]
+        defaultLat:
+          type: ["number", "null"]
+        defaultLon:
+          type: ["number", "null"]
+        defaultLocationName:
+          type: ["string", "null"]
+
+    BodyEntry:
+      type: object
+      required: [regionId, intensity, duration]
+      properties:
+        regionId:
+          type: string
+        intensity:
+          type: integer
+        duration:
+          type: string
+
+    HealthLog:
+      type: object
+      required: [id, userId, date, physicalPain, mentalPain, createdAt]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        date:
+          type: string
+        physicalPain:
+          type: integer
+        mentalPain:
+          type: integer
+        soulState:
+          type: ["integer", "null"]
+        shutdownMeltdown:
+          type: ["string", "null"]
+        bodyEntries:
+          type: array
+          items:
+            $ref: "#/components/schemas/BodyEntry"
+        stressEntries:
+          type: array
+          items:
+            type: string
+        regulationEntries:
+          type: array
+          items:
+            type: string
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    HealthLogInput:
+      type: object
+      required: [physicalPain, mentalPain]
+      properties:
+        physicalPain:
+          type: integer
+        mentalPain:
+          type: integer
+        soulState:
+          type: ["integer", "null"]
+        shutdownMeltdown:
+          type: ["string", "null"]
+        bodyEntries:
+          type: array
+          items:
+            $ref: "#/components/schemas/BodyEntry"
+        stressEntries:
+          type: array
+          items:
+            type: string
+        regulationEntries:
+          type: array
+          items:
+            type: string
+        notes:
+          type: ["string", "null"]
+
+    TimerSession:
+      type: object
+      required: [id, userId, categoryId, categoryName, categoryColor, duration, completedAt, mode]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        presetId:
+          type: ["string", "null"]
+        categoryId:
+          type: string
+        categoryName:
+          type: string
+        categoryColor:
+          type: string
+        duration:
+          type: integer
+        completedAt:
+          type: string
+        mode:
+          type: string
+        connectionReflection:
+          type: ["string", "null"]
+
+    TimerSessionInput:
+      type: object
+      required: [categoryId, categoryName, categoryColor, duration, mode]
+      properties:
+        presetId:
+          type: ["string", "null"]
+        categoryId:
+          type: string
+        categoryName:
+          type: string
+        categoryColor:
+          type: string
+        duration:
+          type: integer
+        mode:
+          type: string
+        connectionReflection:
+          type: ["string", "null"]
+
+    TimerSessionUpdate:
+      type: object
+      properties:
+        connectionReflection:
+          type: ["string", "null"]
+
+    Preset:
+      type: object
+      required: [id, userId, name, duration, categoryId]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        name:
+          type: string
+        duration:
+          type: integer
+        categoryId:
+          type: string
+
+    PresetInput:
+      type: object
+      required: [name, duration, categoryId]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        duration:
+          type: integer
+        categoryId:
+          type: string
+
+    Category:
+      type: object
+      required: [id, userId, name, color]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        name:
+          type: string
+        color:
+          type: string
+        createdAt:
+          type: string
+
+    CategoryInput:
+      type: object
+      required: [name, color]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        color:
+          type: string
+
+    StressFactor:
+      type: object
+      required: [id, userId, label, category]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        label:
+          type: string
+        category:
+          type: string
+        sortOrder:
+          type: integer
+        isDefault:
+          type: boolean
+
+    StressFactorInput:
+      type: object
+      required: [label, category]
+      properties:
+        label:
+          type: string
+          minLength: 1
+        category:
+          type: string
+
+    RegulationStrategy:
+      type: object
+      required: [id, userId, label, channel]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        label:
+          type: string
+        channel:
+          type: string
+        sortOrder:
+          type: integer
+        isDefault:
+          type: boolean
+
+    RegulationStrategyInput:
+      type: object
+      required: [label, channel]
+      properties:
+        label:
+          type: string
+          minLength: 1
+        channel:
+          type: string
+
+    RegulationLog:
+      type: object
+      required: [id, userId, date, activeStrategyIds]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        date:
+          type: string
+        activeStrategyIds:
+          type: array
+          items:
+            type: string
+
+    RegulationLogInput:
+      type: object
+      required: [activeStrategyIds]
+      properties:
+        activeStrategyIds:
+          type: array
+          items:
+            type: string
+
+    EnvironmentSnapshot:
+      type: object
+      required: [id, userId, date]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        date:
+          type: string
+        pollenLevel:
+          type: ["string", "null"]
+        aqi:
+          type: ["number", "null"]
+        pressure:
+          type: ["number", "null"]
+        daylightMinutes:
+          type: ["integer", "null"]
+        feelsLikeTemp:
+          type: ["number", "null"]
+        humidity:
+          type: ["number", "null"]
+
+    EnvironmentSnapshotInput:
+      type: object
+      properties:
+        pollenLevel:
+          type: ["string", "null"]
+        aqi:
+          type: ["number", "null"]
+        pressure:
+          type: ["number", "null"]
+        daylightMinutes:
+          type: ["integer", "null"]
+        feelsLikeTemp:
+          type: ["number", "null"]
+        humidity:
+          type: ["number", "null"]
+
+    EarthEvent:
+      type: object
+      required: [id, title, type, severity, source, publishedAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        type:
+          type: string
+        severity:
+          type: string
+        source:
+          type: string
+        publishedAt:
+          type: string
+        description:
+          type: ["string", "null"]
+        countries:
+          type: array
+          items:
+            type: string
+        url:
+          type: ["string", "null"]
+
+    UserLocationUpdate:
+      type: object
+      properties:
+        defaultLat:
+          type: ["number", "null"]
+        defaultLon:
+          type: ["number", "null"]
+        defaultLocationName:
+          type: ["string", "null"]
+
+    MyData:
+      type: object
+      properties:
+        healthLogs:
+          type: array
+          items:
+            $ref: "#/components/schemas/HealthLog"
+        timerSessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimerSession"
+        environmentSnapshots:
+          type: array
+          items:
+            $ref: "#/components/schemas/EnvironmentSnapshot"
+        stressFactors:
+          type: array
+          items:
+            $ref: "#/components/schemas/StressFactor"
+
+    InsightStats:
+      type: object
+      required: [totalSessions, totalTimeSeconds, topBodyRegions, topStressors, topStrategies]
+      properties:
+        totalSessions:
+          type: integer
+        totalTimeSeconds:
+          type: integer
+        longestSession:
+          type: integer
+        currentStreak:
+          type: integer
+        topBodyRegions:
+          type: array
+          items:
+            type: object
+            required: [regionId, label, score]
+            properties:
+              regionId:
+                type: string
+              label:
+                type: string
+              score:
+                type: number
+        topStressors:
+          type: array
+          items:
+            type: object
+            required: [label, count]
+            properties:
+              label:
+                type: string
+              count:
+                type: integer
+        topStrategies:
+          type: array
+          items:
+            type: object
+            required: [label, count]
+            properties:
+              label:
+                type: string
+              count:
+                type: integer
