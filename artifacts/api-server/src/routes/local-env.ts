@@ -306,9 +306,11 @@ async function fetchPower(lat: number, lon: number): Promise<PowerData> {
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
-router.get("/local-env", requireAuth, async (req, res): Promise<void> => {
-  const userId = req.session.userId!;
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+router.get("/local-env", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  const user = userId
+    ? (await db.select().from(usersTable).where(eq(usersTable.id, userId)))[0]
+    : undefined;
 
   const lat = user?.defaultLat ?? DEFAULT_LAT;
   const lon = user?.defaultLon ?? DEFAULT_LON;

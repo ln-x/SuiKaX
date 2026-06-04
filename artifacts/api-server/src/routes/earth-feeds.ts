@@ -305,7 +305,7 @@ async function fetchWho(): Promise<unknown[]> {
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
-router.get("/earth-feeds", requireAuth, async (req, res): Promise<void> => {
+router.get("/earth-feeds", async (req, res): Promise<void> => {
   const now = Date.now();
   if (aggregateCache && now - aggregateCache.fetchedAt < CACHE_TTL_MS) {
     res.json(aggregateCache);

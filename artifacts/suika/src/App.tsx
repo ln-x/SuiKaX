@@ -75,6 +75,11 @@ function MainApp() {
 
   const goTab = (tab: TabId) => {
     if (!isLoggedIn && !PUBLIC_TABS.includes(tab)) return;
+    // Tapping the already-active tab while guest → back to auth card
+    if (!isLoggedIn && view === "tab" && activeTab === tab) {
+      setView("guest");
+      return;
+    }
     setActiveTab(tab);
     setView("tab");
   };
