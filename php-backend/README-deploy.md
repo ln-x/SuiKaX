@@ -30,7 +30,7 @@ Deploy the full SuiKa app (React frontend + PHP/MySQL backend) to a World4You sh
 
 1. Open **phpMyAdmin** from the control panel
 2. Select your new database
-3. Click **Import** → choose `php-backend/schema.sql`
+3. Click **Import** → choose `_setup/schema.sql` from inside `suika-deploy.zip`
 4. Click **Go**
 
 All 9 tables will be created.

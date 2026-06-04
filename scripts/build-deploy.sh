@@ -19,6 +19,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$REPO_ROOT/artifacts/suika/dist/public"
 PHP_API_DIR="$REPO_ROOT/php-backend/api"
 HTACCESS="$REPO_ROOT/php-backend/.htaccess"
+SCHEMA_SQL="$REPO_ROOT/php-backend/schema.sql"
 STAGING_DIR="$REPO_ROOT/.deploy-staging"
 OUT_ZIP="$REPO_ROOT/suika-deploy.zip"
 
@@ -29,6 +30,7 @@ echo ""
 echo "==> Staging deployment files..."
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR/api"
+mkdir -p "$STAGING_DIR/_setup"
 
 # React app output
 cp -r "$DIST_DIR"/. "$STAGING_DIR/"
@@ -38,6 +40,10 @@ cp -r "$PHP_API_DIR"/. "$STAGING_DIR/api/"
 
 # .htaccess (SPA fallback + API routing)
 cp "$HTACCESS" "$STAGING_DIR/.htaccess"
+
+# Database schema (web-inaccessible; protected by _setup/.htaccess)
+cp "$SCHEMA_SQL" "$STAGING_DIR/_setup/schema.sql"
+printf 'Order deny,allow\nDeny from all\n' > "$STAGING_DIR/_setup/.htaccess"
 
 echo ""
 echo "==> Creating $OUT_ZIP..."
@@ -69,8 +75,11 @@ echo "✓ Done! suika-deploy.zip is ready."
 echo ""
 echo "Next steps:"
 echo "  1. Open suika-deploy.zip and edit api/config.php with your DB credentials."
-echo "  2. Import php-backend/schema.sql into your MySQL database via phpMyAdmin."
+echo "  2. Import _setup/schema.sql into your MySQL database via phpMyAdmin."
 echo "  3. Upload the ZIP contents into your World4You public_html folder via FTP."
 echo "  4. Visit https://yourdomain.com/api/healthz to verify the backend is live."
+echo ""
+echo "Note: _setup/schema.sql is protected by its own .htaccess — it cannot be"
+echo "      accessed over HTTP once uploaded."
 echo ""
 echo "See php-backend/README-deploy.md for the full deployment guide."
