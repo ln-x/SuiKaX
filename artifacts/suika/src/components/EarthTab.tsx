@@ -39,24 +39,36 @@ const ECOSYSTEMS = [
     name: "Arctic Sea Ice",
     status: "Critical decline",
     color: "#4FC3F7",
-    quote: "I am losing what holds me together.",
     icon: "🧊",
+    metrics: [
+      { label: "Summer extent", value: "4.3M km²" },
+      { label: "Trend", value: "−12.2% / decade" },
+      { label: "vs 1980s", value: "−40%" },
+    ],
   },
   {
     id: "amoc",
     name: "Atlantic Circulation (AMOC)",
     status: "Weakening observed",
     color: "#7986CB",
-    quote: "My circulation is slowing. I carry less warmth than I used to.",
     icon: "🌊",
+    metrics: [
+      { label: "Strength", value: "~15 Sv" },
+      { label: "Decline", value: "−15% since 1950" },
+      { label: "Stability", value: "Weakest in 1,000+ yrs" },
+    ],
   },
   {
     id: "rainforest",
     name: "Amazon Rainforest",
     status: "Approaching tipping point",
     color: "#66BB6A",
-    quote: "I am breathing less deeply. Each year, a little less of me remains.",
     icon: "🌳",
+    metrics: [
+      { label: "Forest lost", value: "~17%" },
+      { label: "Tipping point", value: "20–25%" },
+      { label: "Carbon role", value: "Net source" },
+    ],
   },
 ] as const;
 
@@ -211,17 +223,26 @@ export function EarthTab() {
         {ECOSYSTEMS.map((eco) => (
           <div
             key={eco.id}
-            className="shrink-0 w-52 rounded-xl p-4 border border-border/40"
+            className="shrink-0 w-56 rounded-xl p-4 border border-border/40"
             style={{ backgroundColor: eco.color + "0f" }}
           >
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-3">
               <span className="text-lg">{eco.icon}</span>
               <div>
                 <p className="text-xs font-semibold" style={{ color: eco.color }}>{eco.name}</p>
                 <p className="text-xs text-muted-foreground">{eco.status}</p>
               </div>
             </div>
-            <p className="text-xs text-white/70 italic leading-relaxed">"{eco.quote}"</p>
+            <div className="space-y-1.5">
+              {eco.metrics.map((m) => (
+                <div key={m.label} className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">{m.label}</span>
+                  <span className="text-xs font-semibold tabular-nums" style={{ color: eco.color }}>
+                    {m.value}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
@@ -234,7 +255,7 @@ export function EarthTab() {
           </h3>
           {allItems.length > 0 && (
             <p className="text-xs text-muted-foreground mt-0.5">
-              {allItems.length} events · GDACS · USGS · ReliefWeb
+              {allItems.length} events · GDACS · USGS · NASA EONET
             </p>
           )}
         </div>

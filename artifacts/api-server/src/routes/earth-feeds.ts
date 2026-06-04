@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { createHash } from "node:crypto";
 import { requireAuth } from "../lib/auth";
 import { logger } from "../lib/logger";
 
@@ -20,32 +21,11 @@ function classifyType(title: string): string {
   return "other";
 }
 
-async function fetchReliefWeb(): Promise<unknown[]> {
-  try {
-    const resp = await fetch(
-      "https://api.reliefweb.int/v1/disasters?appname=suika-app&limit=10&fields[include][]=name&fields[include][]=status&fields[include][]=date&fields[include][]=country&fields[include][]=url_alias",
-    );
-    const json = await resp.json() as { data?: Array<{ id: number; fields: { name?: string; status?: string; date?: { created?: string }; country?: Array<{ name?: string }>; url_alias?: string } }> };
-    return (json.data ?? []).map((item) => ({
-      id: `rw-${item.id}`,
-      title: item.fields.name ?? "Unknown Event",
-      type: classifyType(item.fields.name ?? ""),
-      severity: item.fields.status === "alert" ? "high" : "medium",
-      source: "ReliefWeb",
-      publishedAt: item.fields.date?.created ?? new Date().toISOString(),
-      description: null,
-      countries: (item.fields.country ?? []).map((c) => c.name ?? "").filter(Boolean),
-      url: item.fields.url_alias ? `https://reliefweb.int${item.fields.url_alias}` : null,
-    }));
-  } catch (err) {
-    logger.warn({ err }, "Failed to fetch ReliefWeb events");
-    return [];
-  }
-}
-
 async function fetchGdacs(): Promise<unknown[]> {
   try {
-    const resp = await fetch("https://www.gdacs.org/xml/rss_7days.xml");
+    const resp = await fetch("https://www.gdacs.org/xml/rss.xml", {
+      headers: { "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)" },
+    });
     const text = await resp.text();
     const items: unknown[] = [];
     const itemRegex = /<item>([\s\S]*?)<\/item>/g;
@@ -64,7 +44,7 @@ async function fetchGdacs(): Promise<unknown[]> {
       if (alertLevel.includes("red") || alertLevel.includes("orange")) severity = "high";
       else if (alertLevel.includes("green")) severity = "low";
       items.push({
-        id: `gdacs-${link ?? Math.random()}`,
+        id: `gdacs-${createHash("md5").update(link ?? title).digest("hex")}`,
         title,
         type: classifyType(title),
         severity,
@@ -78,6 +58,59 @@ async function fetchGdacs(): Promise<unknown[]> {
     return items;
   } catch (err) {
     logger.warn({ err }, "Failed to fetch GDACS feed");
+    return [];
+  }
+}
+
+const EONET_CATEGORY_MAP: Record<string, string> = {
+  wildfires: "wildfire",
+  severeStorms: "storm",
+  floods: "flood",
+  drought: "drought",
+  volcanoes: "volcano",
+  earthquakes: "earthquake",
+  seaLakeIce: "other",
+  landslides: "other",
+  dustHaze: "other",
+  tempExtremes: "other",
+  snow: "other",
+};
+
+async function fetchEonet(): Promise<unknown[]> {
+  try {
+    const resp = await fetch(
+      "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=30&limit=30",
+    );
+    const json = await resp.json() as {
+      events?: Array<{
+        id: string;
+        title: string;
+        link?: string;
+        categories?: Array<{ id: string; title: string }>;
+        sources?: Array<{ id: string; url: string }>;
+        geometry?: Array<{ date?: string }>;
+      }>;
+    };
+    return (json.events ?? []).map((e) => {
+      const catId = e.categories?.[0]?.id ?? "";
+      const type = EONET_CATEGORY_MAP[catId] ?? classifyType(e.title);
+      const geos = e.geometry ?? [];
+      const latest = geos.length > 0 ? geos[geos.length - 1] : undefined;
+      const url = e.sources?.[0]?.url ?? e.link ?? null;
+      return {
+        id: `eonet-${e.id}`,
+        title: e.title,
+        type,
+        severity: type === "wildfire" || type === "storm" || type === "volcano" ? "high" : "medium",
+        source: "NASA EONET",
+        publishedAt: latest?.date ?? new Date().toISOString(),
+        description: (e.categories ?? []).map((c) => c.title).join(", ") || null,
+        countries: [],
+        url,
+      };
+    });
+  } catch (err) {
+    logger.warn({ err }, "Failed to fetch NASA EONET events");
     return [];
   }
 }
@@ -126,8 +159,12 @@ router.get("/earth-feeds", requireAuth, async (req, res): Promise<void> => {
     res.json(cache.data);
     return;
   }
-  const [reliefWeb, gdacs, usgs] = await Promise.all([fetchReliefWeb(), fetchGdacs(), fetchUsgs()]);
-  const combined = [...gdacs, ...usgs, ...reliefWeb].sort(
+  const [gdacs, usgs, eonet] = await Promise.all([
+    fetchGdacs(),
+    fetchUsgs(),
+    fetchEonet(),
+  ]);
+  const combined = [...gdacs, ...usgs, ...eonet].sort(
     (a, b) =>
       new Date((b as { publishedAt: string }).publishedAt).getTime() -
       new Date((a as { publishedAt: string }).publishedAt).getTime(),
