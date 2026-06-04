@@ -79,7 +79,7 @@ function EnvCard({
 
 // ── Skeleton card ─────────────────────────────────────────────────────────────
 function SkeletonCard() {
-  return <div className="bg-card rounded-2xl h-36 border border-border/40 animate-pulse" />;
+  return <div className="bg-muted/40 rounded-2xl h-36 border border-border/60 animate-pulse" />;
 }
 
 // ── Daylight card ─────────────────────────────────────────────────────────────
