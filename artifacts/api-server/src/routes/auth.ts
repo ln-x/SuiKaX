@@ -2,8 +2,30 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, stressFactorsTable, regulationStrategiesTable } from "@workspace/db";
 import { requireAuth } from "../lib/auth";
+
+const DEFAULT_STRESS_FACTORS: Array<{ label: string; category: string; sortOrder: number }> = [
+  { label: "Work Overload", category: "work", sortOrder: 0 },
+  { label: "Conflict", category: "relationships", sortOrder: 1 },
+  { label: "Financial Pressure", category: "financial", sortOrder: 2 },
+  { label: "Health Concerns", category: "health", sortOrder: 3 },
+  { label: "Social Isolation", category: "social", sortOrder: 4 },
+  { label: "Sleep Deprivation", category: "health", sortOrder: 5 },
+  { label: "Uncertainty", category: "mental", sortOrder: 6 },
+  { label: "Overstimulation", category: "environment", sortOrder: 7 },
+];
+
+const DEFAULT_REGULATION_STRATEGIES: Array<{ label: string; channel: string; sortOrder: number }> = [
+  { label: "Box Breathing", channel: "breath", sortOrder: 0 },
+  { label: "4-7-8 Breath", channel: "breath", sortOrder: 1 },
+  { label: "Physiological Sigh", channel: "breath", sortOrder: 2 },
+  { label: "Coherent Breathing", channel: "breath", sortOrder: 3 },
+  { label: "Cold Water Face", channel: "body", sortOrder: 4 },
+  { label: "Movement / Walk", channel: "body", sortOrder: 5 },
+  { label: "Nature Time", channel: "environment", sortOrder: 6 },
+  { label: "Journaling", channel: "cognitive", sortOrder: 7 },
+];
 
 const router = Router();
 
@@ -23,6 +45,28 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   const hashed = await bcrypt.hash(password, 10);
   const id = randomUUID();
   const [user] = await db.insert(usersTable).values({ id, username, password: hashed }).returning();
+
+  await db.insert(stressFactorsTable).values(
+    DEFAULT_STRESS_FACTORS.map((f) => ({
+      id: randomUUID(),
+      userId: user.id,
+      label: f.label,
+      category: f.category,
+      sortOrder: f.sortOrder,
+      isDefault: true,
+    }))
+  );
+
+  await db.insert(regulationStrategiesTable).values(
+    DEFAULT_REGULATION_STRATEGIES.map((s) => ({
+      id: randomUUID(),
+      userId: user.id,
+      label: s.label,
+      channel: s.channel,
+      sortOrder: s.sortOrder,
+      isDefault: true,
+    }))
+  );
 
   req.session.userId = user.id;
   req.session.username = user.username;
