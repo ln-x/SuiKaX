@@ -159,18 +159,104 @@ async function fetchUsgs(): Promise<unknown[]> {
   }
 }
 
+async function fetchWho(): Promise<unknown[]> {
+  try {
+    const resp = await fetch(
+      "https://www.who.int/api/news/diseaseoutbreaknews?$orderby=PublicationDateAndTime%20desc&$top=10",
+      {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)",
+        },
+      },
+    );
+    const json = await resp.json() as {
+      value?: Array<{
+        Id: string;
+        Title?: string;
+        PublicationDateAndTime?: string;
+        ItemDefaultUrl?: string;
+      }>;
+    };
+    return (json.value ?? []).map((d) => ({
+      id: `who-${d.Id}`,
+      title: d.Title ?? "Disease Outbreak News",
+      type: "epidemic",
+      severity: "medium",
+      source: "WHO",
+      publishedAt: d.PublicationDateAndTime ?? new Date().toISOString(),
+      description: null,
+      countries: [],
+      url: d.ItemDefaultUrl
+        ? `https://www.who.int/emergencies/disease-outbreak-news/item${d.ItemDefaultUrl}`
+        : null,
+    }));
+  } catch (err) {
+    logger.warn({ err }, "Failed to fetch WHO disease outbreak news");
+    return [];
+  }
+}
+
+async function fetchTsunami(): Promise<unknown[]> {
+  try {
+    const resp = await fetch(
+      "https://api.weather.gov/alerts/active?code=TSW,TSA,TSY",
+      {
+        headers: {
+          Accept: "application/geo+json",
+          "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)",
+        },
+      },
+    );
+    const json = await resp.json() as {
+      features?: Array<{
+        id: string;
+        properties: {
+          event?: string;
+          headline?: string;
+          areaDesc?: string;
+          sent?: string;
+          severity?: string;
+          description?: string;
+        };
+      }>;
+    };
+    return (json.features ?? []).map((f) => {
+      const p = f.properties;
+      const sev = (p.severity ?? "").toLowerCase();
+      const severity = sev === "extreme" || sev === "severe" ? "high" : "medium";
+      return {
+        id: `nws-${f.id}`,
+        title: p.headline || p.event || "Tsunami Alert",
+        type: "tsunami",
+        severity,
+        source: "NWS",
+        publishedAt: p.sent ?? new Date().toISOString(),
+        description: p.description ?? null,
+        countries: p.areaDesc ? [p.areaDesc] : [],
+        url: "https://www.tsunami.gov/",
+      };
+    });
+  } catch (err) {
+    logger.warn({ err }, "Failed to fetch NWS tsunami alerts");
+    return [];
+  }
+}
+
 router.get("/earth-feeds", requireAuth, async (req, res): Promise<void> => {
   const now = Date.now();
   if (cache && now - cache.fetchedAt < CACHE_TTL_MS) {
     res.json(cache.data);
     return;
   }
-  const [gdacs, usgs, eonet] = await Promise.all([
+  const [gdacs, usgs, eonet, who, tsunami] = await Promise.all([
     fetchGdacs(),
     fetchUsgs(),
     fetchEonet(),
+    fetchWho(),
+    fetchTsunami(),
   ]);
-  const combined = [...gdacs, ...usgs, ...eonet].sort(
+  const combined = [...gdacs, ...usgs, ...eonet, ...who, ...tsunami].sort(
     (a, b) =>
       new Date((b as { publishedAt: string }).publishedAt).getTime() -
       new Date((a as { publishedAt: string }).publishedAt).getTime(),

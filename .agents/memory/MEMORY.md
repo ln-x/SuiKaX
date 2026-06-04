@@ -2,4 +2,4 @@
 - [SuiKa type gotchas](suika-type-gotchas.md) — real generated schema field names differ significantly from assumed names
 - [World4You PHP deploy](world4you-deploy.md) — cURL required for external HTTP on shared hosting; file_get_contents may be disabled.
 - [NASA EPIC setup](nasa-epic.md) — VITE_NASA_API_KEY env var baked into Vite build; always provide DEMO_KEY fallback in code.
-- [Earth feed sources](earth-feed-sources.md) — GDACS rss.xml + USGS + NASA EONET work; GDACS rss_7days.xml dead, ReliefWeb v1 decommissioned & v2 needs approved appname.
+- [Earth feed sources](earth-feed-sources.md) — working/dead feeds per Earth-event category; WHO DON JSON for epidemic, NWS alerts for tsunami, GDACS/USGS/EONET for the rest.

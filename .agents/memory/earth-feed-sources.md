@@ -11,11 +11,27 @@ Used by both `artifacts/api-server/src/routes/earth-feeds.ts` and the mirrored
 ## Working sources
 - **GDACS**: `https://www.gdacs.org/xml/rss.xml` (RSS). Covers flood, drought,
   earthquake, storm/cyclone, volcano, tsunami. ~30 items. Send a User-Agent.
+  Occasionally fails transiently with `ECONNRESET` — the per-source try/catch
+  returning `[]` is what keeps the endpoint resilient.
 - **USGS**: `significant_week.geojson`. Earthquakes only.
 - **NASA EONET v3**: `events?status=open&days=30`. Dominated by wildfires
   (often 70+); also severeStorms, volcanoes, seaLakeIce. **Has NO floods or
   drought** even with status=all/long windows. Cap the limit (~30) or wildfires
   swamp the default "all" view.
+- **WHO Disease Outbreak News** (epidemic): `https://www.who.int/api/news/diseaseoutbreaknews`
+  OData JSON. Use `?$orderby=PublicationDateAndTime desc&$top=10` (URL-encode the
+  space) — the **unsorted** default returns 2006-era items first. Fields: `Id`,
+  `Title`, `PublicationDateAndTime`, `ItemDefaultUrl`. Full URL =
+  `https://www.who.int/emergencies/disease-outbreak-news/item` + `ItemDefaultUrl`.
+  **Force `type:"epidemic"`** — many titles ("Avian influenza – situation in X")
+  lack the classifier's epidemic/outbreak/disease keywords. The old RSS
+  `feeds/entity/csr/don/.../rss.xml` is dead (404 HTML), and `rss-feeds/news-english.xml`
+  carries zero DON items — only the JSON API works.
+- **NWS tsunami** (tsunami): `https://api.weather.gov/alerts/active?code=TSW,TSA,TSY`
+  (Warning/Watch/Advisory). GeoJSON; **requires a User-Agent** or it 403s.
+  US/Pacific-focused and almost always empty (returns clean `features:[]`, HTTP 200) —
+  rely on the empty-state UI. Prefer this over tsunami.gov atom feeds, which spam
+  non-threat "information statements".
 
 ## Broken / unusable (do not re-add without fixing)
 - GDACS `rss_7days.xml` — dead, now returns an HTML admin page, not RSS.

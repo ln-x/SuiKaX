@@ -153,11 +153,64 @@ function fetch_eonet(): array {
     return $out;
 }
 
-$gdacs = fetch_gdacs();
-$usgs  = fetch_usgs();
-$eonet = fetch_eonet();
+// ── WHO Disease Outbreak News ─────────────────────────────────────────────────
+function fetch_who(): array {
+    $raw = http_get('https://www.who.int/api/news/diseaseoutbreaknews?$orderby=PublicationDateAndTime%20desc&$top=10');
+    if (!$raw) return [];
+    $data = json_decode($raw, true);
+    $out  = [];
+    foreach ($data['value'] ?? [] as $d) {
+        $url = isset($d['ItemDefaultUrl'])
+            ? 'https://www.who.int/emergencies/disease-outbreak-news/item' . $d['ItemDefaultUrl']
+            : null;
+        $out[] = [
+            'id'          => 'who-' . ($d['Id'] ?? md5($d['Title'] ?? '')),
+            'title'       => $d['Title'] ?? 'Disease Outbreak News',
+            'type'        => 'epidemic',
+            'severity'    => 'medium',
+            'source'      => 'WHO',
+            'publishedAt' => $d['PublicationDateAndTime'] ?? gmdate('c'),
+            'description' => null,
+            'countries'   => [],
+            'url'         => $url,
+        ];
+    }
+    return $out;
+}
 
-$combined = array_merge($gdacs, $usgs, $eonet);
+// ── NWS active tsunami alerts (Warning / Watch / Advisory) ─────────────────────
+function fetch_tsunami(): array {
+    $raw = http_get('https://api.weather.gov/alerts/active?code=TSW,TSA,TSY');
+    if (!$raw) return [];
+    $data = json_decode($raw, true);
+    $out  = [];
+    foreach ($data['features'] ?? [] as $f) {
+        $p   = $f['properties'] ?? [];
+        $sev = strtolower($p['severity'] ?? '');
+        $severity = ($sev === 'extreme' || $sev === 'severe') ? 'high' : 'medium';
+        $title = ($p['headline'] ?? '') ?: (($p['event'] ?? '') ?: 'Tsunami Alert');
+        $out[] = [
+            'id'          => 'nws-' . ($f['id'] ?? md5(($p['headline'] ?? '') . ($p['sent'] ?? ''))),
+            'title'       => $title,
+            'type'        => 'tsunami',
+            'severity'    => $severity,
+            'source'      => 'NWS',
+            'publishedAt' => $p['sent'] ?? gmdate('c'),
+            'description' => $p['description'] ?? null,
+            'countries'   => isset($p['areaDesc']) ? [$p['areaDesc']] : [],
+            'url'         => 'https://www.tsunami.gov/',
+        ];
+    }
+    return $out;
+}
+
+$gdacs   = fetch_gdacs();
+$usgs    = fetch_usgs();
+$eonet   = fetch_eonet();
+$who     = fetch_who();
+$tsunami = fetch_tsunami();
+
+$combined = array_merge($gdacs, $usgs, $eonet, $who, $tsunami);
 usort($combined, fn($a, $b) => strtotime($b['publishedAt']) - strtotime($a['publishedAt']));
 
 $json = json_encode($combined, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

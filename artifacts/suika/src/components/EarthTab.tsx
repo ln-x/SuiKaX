@@ -255,7 +255,7 @@ export function EarthTab() {
           </h3>
           {allItems.length > 0 && (
             <p className="text-xs text-muted-foreground mt-0.5">
-              {allItems.length} events · GDACS · USGS · NASA EONET
+              {allItems.length} events · GDACS · USGS · NASA EONET · WHO · NWS
             </p>
           )}
         </div>
@@ -311,7 +311,18 @@ export function EarthTab() {
 
         {!isLoading && !error && filtered.length === 0 && (
           <div className="text-muted-foreground text-center py-10 text-sm">
-            No {filter === "all" ? "" : filter} events right now.
+            <Globe size={22} className="mx-auto mb-3 opacity-40" />
+            {filter === "all" ? (
+              "No global events reported right now."
+            ) : (
+              <>
+                No active {TYPE_CONFIG[filter]?.label.toLowerCase() ?? filter} events
+                reported right now.
+                <span className="block text-xs opacity-60 mt-1">
+                  That's good news — the feed is live and simply has nothing to report.
+                </span>
+              </>
+            )}
           </div>
         )}
 
