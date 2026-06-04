@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "avLCP35JReZc3qCq1_1Rj"
+uri = "file://suika-deploy.zip"
+type = "unspecified"
+title = "suika-deploy.zip — World4You deploy package"
