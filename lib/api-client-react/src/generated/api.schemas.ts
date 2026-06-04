@@ -210,6 +210,24 @@ export interface EnvironmentSnapshotInput {
   humidity?: number | null;
 }
 
+export type FeedSourceStatusStatus = typeof FeedSourceStatusStatus[keyof typeof FeedSourceStatusStatus];
+
+
+export const FeedSourceStatusStatus = {
+  ok: 'ok',
+  empty: 'empty',
+  error: 'error',
+  stale: 'stale',
+} as const;
+
+export interface FeedSourceStatus {
+  name: string;
+  status: FeedSourceStatusStatus;
+  count: number;
+  /** @nullable */
+  error?: string | null;
+}
+
 export interface EarthEvent {
   id: string;
   title: string;
@@ -222,6 +240,11 @@ export interface EarthEvent {
   countries?: string[];
   /** @nullable */
   url?: string | null;
+}
+
+export interface EarthFeedsResponse {
+  events: EarthEvent[];
+  sources: FeedSourceStatus[];
 }
 
 export interface UserLocationUpdate {

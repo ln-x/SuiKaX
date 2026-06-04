@@ -404,9 +404,10 @@ export const SaveEnvironmentSnapshotResponse = zod.object({
 
 
 /**
- * @summary Get live GDACS and ReliefWeb global event feeds
+ * @summary Get live global natural-event feeds with per-source status
  */
-export const GetEarthFeedsResponseItem = zod.object({
+export const GetEarthFeedsResponse = zod.object({
+  "events": zod.array(zod.object({
   "id": zod.string(),
   "title": zod.string(),
   "type": zod.string(),
@@ -416,8 +417,14 @@ export const GetEarthFeedsResponseItem = zod.object({
   "description": zod.string().nullish(),
   "countries": zod.array(zod.string()).optional(),
   "url": zod.string().nullish()
+})),
+  "sources": zod.array(zod.object({
+  "name": zod.string(),
+  "status": zod.enum(['ok', 'empty', 'error', 'stale']),
+  "count": zod.number(),
+  "error": zod.string().nullish()
+}))
 })
-export const GetEarthFeedsResponse = zod.array(GetEarthFeedsResponseItem)
 
 
 /**

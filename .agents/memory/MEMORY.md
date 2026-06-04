@@ -3,3 +3,4 @@
 - [World4You PHP deploy](world4you-deploy.md) — cURL required for external HTTP on shared hosting; file_get_contents may be disabled.
 - [NASA EPIC setup](nasa-epic.md) — VITE_NASA_API_KEY env var baked into Vite build; always provide DEMO_KEY fallback in code.
 - [Earth feed sources](earth-feed-sources.md) — working/dead feeds per Earth-event category; WHO DON JSON for epidemic, NWS alerts for tsunami, GDACS/USGS/EONET for the rest.
+- [Earth feeds network constraints](earth-feeds-network.md) — GVP (403) and EONET multi-call (503) blocked from Replit server IP; use single EONET request.

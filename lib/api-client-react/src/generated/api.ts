@@ -23,7 +23,7 @@ import type {
   AuthCredentials,
   Category,
   CategoryInput,
-  EarthEvent,
+  EarthFeedsResponse,
   EnvironmentSnapshot,
   EnvironmentSnapshotInput,
   ErrorResponse,
@@ -2042,11 +2042,11 @@ export const getGetEarthFeedsUrl = () => {
 }
 
 /**
- * @summary Get live GDACS and ReliefWeb global event feeds
+ * @summary Get live global natural-event feeds with per-source status
  */
-export const getEarthFeeds = async ( options?: RequestInit): Promise<EarthEvent[]> => {
+export const getEarthFeeds = async ( options?: RequestInit): Promise<EarthFeedsResponse> => {
 
-  return customFetch<EarthEvent[]>(getGetEarthFeedsUrl(),
+  return customFetch<EarthFeedsResponse>(getGetEarthFeedsUrl(),
   {
     ...options,
     method: 'GET'
@@ -2089,7 +2089,7 @@ export type GetEarthFeedsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Get live GDACS and ReliefWeb global event feeds
+ * @summary Get live global natural-event feeds with per-source status
  */
 
 export function useGetEarthFeeds<TData = Awaited<ReturnType<typeof getEarthFeeds>>, TError = ErrorType<unknown>>(
