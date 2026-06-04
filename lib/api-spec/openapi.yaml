@@ -593,6 +593,25 @@ paths:
         "204":
           description: Deleted
 
+  /local-env:
+    get:
+      operationId: getLocalEnv
+      tags: [environment]
+      summary: Get live local environment data (Open-Meteo, CAMS, NASA POWER)
+      responses:
+        "200":
+          description: Local environment snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalEnvResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /insights/stats:
     get:
       operationId: getInsightStats
@@ -1078,3 +1097,93 @@ components:
                 type: string
               count:
                 type: integer
+
+    LocalEnvMeta:
+      type: object
+      required: [source, grid, lat, lon]
+      properties:
+        source: { type: string }
+        grid: { type: string }
+        lat: { type: number }
+        lon: { type: number }
+        elevation: { type: number, nullable: true }
+
+    LocalEnvResponse:
+      type: object
+      required: [daylight, windChill, sultriness, pressure, airQuality, temperature, precipitation]
+      properties:
+        daylight:
+          type: object
+          required: [daylightSec, sunshineSec, sunshinePercent, description, meta]
+          properties:
+            daylightSec: { type: integer }
+            sunshineSec: { type: integer }
+            sunshinePercent: { type: integer }
+            description: { type: string }
+            meta: { $ref: "#/components/schemas/LocalEnvMeta" }
+        windChill:
+          type: object
+          required: [feelsLike, actualTemp, windSpeed, description, meta]
+          properties:
+            feelsLike: { type: number }
+            actualTemp: { type: number }
+            windSpeed: { type: number }
+            description: { type: string }
+            meta: { $ref: "#/components/schemas/LocalEnvMeta" }
+        sultriness:
+          type: object
+          required: [feelsLike, actualTemp, humidity, level, description, meta]
+          properties:
+            feelsLike: { type: number }
+            actualTemp: { type: number }
+            humidity: { type: integer }
+            level: { type: string }
+            description: { type: string }
+            meta: { $ref: "#/components/schemas/LocalEnvMeta" }
+        pressure:
+          type: object
+          required: [hPa, level, description, meta]
+          properties:
+            hPa: { type: number }
+            level: { type: string }
+            description: { type: string }
+            meta: { $ref: "#/components/schemas/LocalEnvMeta" }
+        airQuality:
+          type: object
+          required: [aqi, aqiLabel, pm25, pm10, no2, o3, so2, description, meta]
+          properties:
+            aqi: { type: integer }
+            aqiLabel: { type: string }
+            pm25: { type: number }
+            pm10: { type: number }
+            no2: { type: number }
+            o3: { type: number }
+            so2: { type: number }
+            description: { type: string }
+            meta: { $ref: "#/components/schemas/LocalEnvMeta" }
+        pollen:
+          nullable: true
+          type: object
+          required: [dominant, grains, severity, description, meta]
+          properties:
+            dominant: { type: string }
+            grains: { type: number }
+            severity: { type: string }
+            description: { type: string }
+            meta: { $ref: "#/components/schemas/LocalEnvMeta" }
+        temperature:
+          type: object
+          required: [monthly30dMean, anomaly, description, meta]
+          properties:
+            monthly30dMean: { type: number }
+            anomaly: { type: number }
+            description: { type: string }
+            meta: { $ref: "#/components/schemas/LocalEnvMeta" }
+        precipitation:
+          type: object
+          required: [monthly30dSum, pctVsAvg, description, meta]
+          properties:
+            monthly30dSum: { type: number }
+            pctVsAvg: { type: integer }
+            description: { type: string }
+            meta: { $ref: "#/components/schemas/LocalEnvMeta" }

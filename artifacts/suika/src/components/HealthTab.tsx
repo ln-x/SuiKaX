@@ -3,6 +3,7 @@ import {
   useGetHealthLogs,
   useSaveHealthLog,
   useGetStressFactors,
+  useSaveEnvironmentSnapshot,
 } from "@workspace/api-client-react";
 import { Heart, CheckCircle } from "lucide-react";
 
@@ -53,6 +54,51 @@ const ELEMENT_COLORS: Record<string, string> = {
   Wood: "text-green-400",
 };
 
+const TCM_MERIDIANS = [
+  { id: "liver", label: "Liver / Wood", color: "#4ade80", cx: 50, cy: 30 },
+  { id: "heart", label: "Heart / Fire", color: "#f87171", cx: 60, cy: 35 },
+  { id: "spleen", label: "Spleen / Earth", color: "#facc15", cx: 45, cy: 42 },
+  { id: "lung", label: "Lung / Metal", color: "#c084fc", cx: 65, cy: 32 },
+  { id: "kidney", label: "Kidney / Water", color: "#60a5fa", cx: 52, cy: 52 },
+  { id: "gallbladder", label: "Gallbladder", color: "#86efac", cx: 38, cy: 40 },
+  { id: "stomach", label: "Stomach", color: "#fcd34d", cx: 55, cy: 45 },
+  { id: "bladder", label: "Bladder", color: "#93c5fd", cx: 50, cy: 60 },
+];
+
+function BodyMap({
+  selected,
+  onToggle,
+}: {
+  selected: string[];
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <svg viewBox="0 0 100 80" className="w-[130px] shrink-0 h-[200px]">
+      <ellipse cx="50" cy="12" rx="8" ry="10" fill="#222" stroke="#444" strokeWidth="0.5" />
+      <rect x="40" y="22" width="20" height="28" rx="3" fill="#1a1a1a" stroke="#444" strokeWidth="0.5" />
+      <rect x="30" y="23" width="9" height="22" rx="3" fill="#1a1a1a" stroke="#444" strokeWidth="0.5" />
+      <rect x="61" y="23" width="9" height="22" rx="3" fill="#1a1a1a" stroke="#444" strokeWidth="0.5" />
+      <rect x="42" y="50" width="7" height="24" rx="3" fill="#1a1a1a" stroke="#444" strokeWidth="0.5" />
+      <rect x="51" y="50" width="7" height="24" rx="3" fill="#1a1a1a" stroke="#444" strokeWidth="0.5" />
+      {TCM_MERIDIANS.map((m) => (
+        <circle
+          key={m.id}
+          cx={m.cx}
+          cy={m.cy}
+          r={selected.includes(m.id) ? 3.5 : 2.5}
+          fill={m.color + "80"}
+          stroke={m.color}
+          strokeWidth="0.8"
+          style={{ cursor: "pointer", opacity: selected.includes(m.id) ? 1 : 0.5 }}
+          onClick={() => onToggle(m.id)}
+        >
+          <title>{m.label}</title>
+        </circle>
+      ))}
+    </svg>
+  );
+}
+
 function getCurrentOrgan() {
   const h = new Date().getHours();
   const pairs: [number, number, string][] = [
@@ -76,9 +122,14 @@ export function HealthTab() {
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState(false);
 
+  const [selectedMeridians, setSelectedMeridians] = useState<string[]>([]);
+  const [snapNote, setSnapNote] = useState("");
+  const [snapSaved, setSnapSaved] = useState(false);
+
   const { data: healthLogs, refetch: refetchLogs } = useGetHealthLogs();
   const { data: stressFactors } = useGetStressFactors();
   const saveLog = useSaveHealthLog();
+  const saveSnapshot = useSaveEnvironmentSnapshot();
 
   const handleSave = () => {
     saveLog.mutate(
@@ -106,9 +157,38 @@ export function HealthTab() {
     );
   };
 
+  const handleSnapSave = () => {
+    saveSnapshot.mutate(
+      {
+        data: {
+          aqi: null,
+          pollenLevel: null,
+          pressure: null,
+          daylightMinutes: null,
+          feelsLikeTemp: null,
+          humidity: null,
+        },
+      },
+      {
+        onSuccess: () => {
+          setSnapSaved(true);
+          setSnapNote("");
+          setSelectedMeridians([]);
+          setTimeout(() => setSnapSaved(false), 2000);
+        },
+      }
+    );
+  };
+
   const toggleStress = (label: string) => {
     setSelectedStress((prev) =>
       prev.includes(label) ? prev.filter((s) => s !== label) : [...prev, label]
+    );
+  };
+
+  const toggleMeridian = (id: string) => {
+    setSelectedMeridians((prev) =>
+      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
     );
   };
 
@@ -231,6 +311,59 @@ export function HealthTab() {
             "Saving..."
           ) : (
             "Log Check-in"
+          )}
+        </button>
+      </div>
+
+      {/* TCM Body Map — moved from Local tab */}
+      <div className="bg-card rounded-2xl p-4 border border-border/40">
+        <h3 className="text-sm font-medium mb-1 text-muted-foreground">
+          TCM Body Map — What feels active?
+        </h3>
+        <p className="text-xs text-muted-foreground/60 mb-3">Tap meridian points that feel tense or active:</p>
+        <div className="flex gap-4">
+          <BodyMap selected={selectedMeridians} onToggle={toggleMeridian} />
+          <div className="flex-1 flex flex-col gap-2 min-w-0">
+            <div className="flex flex-wrap gap-1 min-h-[28px]">
+              {selectedMeridians.map((id) => {
+                const m = TCM_MERIDIANS.find((m) => m.id === id);
+                return (
+                  <span
+                    key={id}
+                    className="text-xs px-2 py-0.5 rounded-full border"
+                    style={{ borderColor: m?.color, color: m?.color }}
+                  >
+                    {m?.label.split(" /")[0]}
+                  </span>
+                );
+              })}
+              {selectedMeridians.length === 0 && (
+                <span className="text-xs text-muted-foreground/40">None selected</span>
+              )}
+            </div>
+            <textarea
+              value={snapNote}
+              onChange={(e) => setSnapNote(e.target.value)}
+              placeholder="Note how you feel..."
+              rows={4}
+              className="flex-1 bg-transparent text-xs border border-border/40 rounded-lg p-2 resize-none outline-none focus:border-primary/50 placeholder:text-muted-foreground/50"
+            />
+          </div>
+        </div>
+        <button
+          onClick={handleSnapSave}
+          disabled={saveSnapshot.isPending || snapSaved}
+          className="w-full mt-3 py-2 rounded-full border border-primary/50 text-sm text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {snapSaved ? (
+            <>
+              <CheckCircle size={14} />
+              Snapshot Saved
+            </>
+          ) : saveSnapshot.isPending ? (
+            "Saving..."
+          ) : (
+            "Log Snapshot"
           )}
         </button>
       </div>

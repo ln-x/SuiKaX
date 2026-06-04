@@ -10,6 +10,7 @@ import regulationStrategiesRouter from "./regulation-strategies";
 import regulationLogsRouter from "./regulation-logs";
 import environmentSnapshotsRouter from "./environment-snapshots";
 import earthFeedsRouter from "./earth-feeds";
+import localEnvRouter from "./local-env";
 import userRouter from "./user";
 import insightsRouter from "./insights";
 
@@ -26,6 +27,7 @@ router.use(regulationStrategiesRouter);
 router.use(regulationLogsRouter);
 router.use(environmentSnapshotsRouter);
 router.use(earthFeedsRouter);
+router.use(localEnvRouter);
 router.use(userRouter);
 router.use(insightsRouter);
 

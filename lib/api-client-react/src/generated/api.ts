@@ -31,6 +31,7 @@ import type {
   HealthLogInput,
   HealthStatus,
   InsightStats,
+  LocalEnvResponse,
   MyData,
   Preset,
   PresetInput,
@@ -2329,6 +2330,83 @@ export const useDeleteMyDataRecord = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getDeleteMyDataRecordMutationOptions(options));
     }
+
+export const getGetLocalEnvUrl = () => {
+
+
+
+
+  return `/api/local-env`
+}
+
+/**
+ * @summary Get live local environment data (Open-Meteo, CAMS, NASA POWER)
+ */
+export const getLocalEnv = async ( options?: RequestInit): Promise<LocalEnvResponse> => {
+
+  return customFetch<LocalEnvResponse>(getGetLocalEnvUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLocalEnvQueryKey = () => {
+    return [
+    `/api/local-env`
+    ] as const;
+    }
+
+
+export const getGetLocalEnvQueryOptions = <TData = Awaited<ReturnType<typeof getLocalEnv>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLocalEnv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLocalEnvQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLocalEnv>>> = ({ signal }) => getLocalEnv({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLocalEnv>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLocalEnvQueryResult = NonNullable<Awaited<ReturnType<typeof getLocalEnv>>>
+export type GetLocalEnvQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get live local environment data (Open-Meteo, CAMS, NASA POWER)
+ */
+
+export function useGetLocalEnv<TData = Awaited<ReturnType<typeof getLocalEnv>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLocalEnv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLocalEnvQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getGetInsightStatsUrl = () => {
 

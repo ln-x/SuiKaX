@@ -512,6 +512,119 @@ export const DeleteMyDataRecordParams = zod.object({
 
 
 /**
+ * @summary Get live local environment data (Open-Meteo, CAMS, NASA POWER)
+ */
+export const GetLocalEnvResponse = zod.object({
+  "daylight": zod.object({
+  "daylightSec": zod.number(),
+  "sunshineSec": zod.number(),
+  "sunshinePercent": zod.number(),
+  "description": zod.string(),
+  "meta": zod.object({
+  "source": zod.string(),
+  "grid": zod.string(),
+  "lat": zod.number(),
+  "lon": zod.number(),
+  "elevation": zod.number().nullish()
+})
+}),
+  "windChill": zod.object({
+  "feelsLike": zod.number(),
+  "actualTemp": zod.number(),
+  "windSpeed": zod.number(),
+  "description": zod.string(),
+  "meta": zod.object({
+  "source": zod.string(),
+  "grid": zod.string(),
+  "lat": zod.number(),
+  "lon": zod.number(),
+  "elevation": zod.number().nullish()
+})
+}),
+  "sultriness": zod.object({
+  "feelsLike": zod.number(),
+  "actualTemp": zod.number(),
+  "humidity": zod.number(),
+  "level": zod.string(),
+  "description": zod.string(),
+  "meta": zod.object({
+  "source": zod.string(),
+  "grid": zod.string(),
+  "lat": zod.number(),
+  "lon": zod.number(),
+  "elevation": zod.number().nullish()
+})
+}),
+  "pressure": zod.object({
+  "hPa": zod.number(),
+  "level": zod.string(),
+  "description": zod.string(),
+  "meta": zod.object({
+  "source": zod.string(),
+  "grid": zod.string(),
+  "lat": zod.number(),
+  "lon": zod.number(),
+  "elevation": zod.number().nullish()
+})
+}),
+  "airQuality": zod.object({
+  "aqi": zod.number(),
+  "aqiLabel": zod.string(),
+  "pm25": zod.number(),
+  "pm10": zod.number(),
+  "no2": zod.number(),
+  "o3": zod.number(),
+  "so2": zod.number(),
+  "description": zod.string(),
+  "meta": zod.object({
+  "source": zod.string(),
+  "grid": zod.string(),
+  "lat": zod.number(),
+  "lon": zod.number(),
+  "elevation": zod.number().nullish()
+})
+}),
+  "pollen": zod.object({
+  "dominant": zod.string(),
+  "grains": zod.number(),
+  "severity": zod.string(),
+  "description": zod.string(),
+  "meta": zod.object({
+  "source": zod.string(),
+  "grid": zod.string(),
+  "lat": zod.number(),
+  "lon": zod.number(),
+  "elevation": zod.number().nullish()
+})
+}).nullish(),
+  "temperature": zod.object({
+  "monthly30dMean": zod.number(),
+  "anomaly": zod.number(),
+  "description": zod.string(),
+  "meta": zod.object({
+  "source": zod.string(),
+  "grid": zod.string(),
+  "lat": zod.number(),
+  "lon": zod.number(),
+  "elevation": zod.number().nullish()
+})
+}),
+  "precipitation": zod.object({
+  "monthly30dSum": zod.number(),
+  "pctVsAvg": zod.number(),
+  "description": zod.string(),
+  "meta": zod.object({
+  "source": zod.string(),
+  "grid": zod.string(),
+  "lat": zod.number(),
+  "lon": zod.number(),
+  "elevation": zod.number().nullish()
+})
+})
+})
+
+
+/**
  * @summary Get aggregated insight statistics across all logs
  */
 export const GetInsightStatsResponse = zod.object({

@@ -289,3 +289,88 @@ export interface InsightStats {
   topStrategies: InsightStatsTopStrategiesItem[];
 }
 
+export interface LocalEnvMeta {
+  source: string;
+  grid: string;
+  lat: number;
+  lon: number;
+  elevation?: number | null;
+}
+
+export type LocalEnvResponseDaylight = {
+  daylightSec: number;
+  sunshineSec: number;
+  sunshinePercent: number;
+  description: string;
+  meta: LocalEnvMeta;
+};
+
+export type LocalEnvResponseWindChill = {
+  feelsLike: number;
+  actualTemp: number;
+  windSpeed: number;
+  description: string;
+  meta: LocalEnvMeta;
+};
+
+export type LocalEnvResponseSultriness = {
+  feelsLike: number;
+  actualTemp: number;
+  humidity: number;
+  level: string;
+  description: string;
+  meta: LocalEnvMeta;
+};
+
+export type LocalEnvResponsePressure = {
+  hPa: number;
+  level: string;
+  description: string;
+  meta: LocalEnvMeta;
+};
+
+export type LocalEnvResponseAirQuality = {
+  aqi: number;
+  aqiLabel: string;
+  pm25: number;
+  pm10: number;
+  no2: number;
+  o3: number;
+  so2: number;
+  description: string;
+  meta: LocalEnvMeta;
+};
+
+export type LocalEnvResponsePollen = {
+  dominant: string;
+  grains: number;
+  severity: string;
+  description: string;
+  meta: LocalEnvMeta;
+} | null;
+
+export type LocalEnvResponseTemperature = {
+  monthly30dMean: number;
+  anomaly: number;
+  description: string;
+  meta: LocalEnvMeta;
+};
+
+export type LocalEnvResponsePrecipitation = {
+  monthly30dSum: number;
+  pctVsAvg: number;
+  description: string;
+  meta: LocalEnvMeta;
+};
+
+export interface LocalEnvResponse {
+  daylight: LocalEnvResponseDaylight;
+  windChill: LocalEnvResponseWindChill;
+  sultriness: LocalEnvResponseSultriness;
+  pressure: LocalEnvResponsePressure;
+  airQuality: LocalEnvResponseAirQuality;
+  pollen?: LocalEnvResponsePollen;
+  temperature: LocalEnvResponseTemperature;
+  precipitation: LocalEnvResponsePrecipitation;
+}
+
