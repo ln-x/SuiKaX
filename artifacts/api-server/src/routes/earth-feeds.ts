@@ -79,7 +79,13 @@ const EONET_CATEGORY_MAP: Record<string, string> = {
 async function fetchEonet(): Promise<unknown[]> {
   try {
     const resp = await fetch(
-      "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=30&limit=30",
+      "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=360&limit=30",
+      {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)",
+        },
+      },
     );
     const json = await resp.json() as {
       events?: Array<{

@@ -23,6 +23,15 @@ Used by both `artifacts/api-server/src/routes/earth-feeds.ts` and the mirrored
 - ReliefWeb **v2** — requires an *approved* appname (HTTP 403 otherwise);
   arbitrary appnames no longer work. Needs user to register at apidoc.reliefweb.int.
 
+## EONET rate-limiting gotcha
+EONET throttles by client IP under rapid/concurrent requests: it returns a
+truncated body (no `events` key, HTTP 200) instead of erroring. A single call
+works fine; hammering it (repeated curl/node tests + the server's own call)
+makes EONET silently return 0 events with no thrown error. In production the
+server caches 30 min and calls once, so this is a *testing artifact*, not a bug.
+When verifying, do ONE clean call after a cooldown — don't conclude EONET is
+broken from back-to-back tests. `json.events ?? []` already degrades gracefully.
+
 ## Category coverage strategy
 GDACS provides flood/drought/earthquake/storm; EONET provides wildfire; USGS
 adds earthquakes. Together every main filter pill (earthquake, flood, drought,

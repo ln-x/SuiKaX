@@ -113,7 +113,7 @@ function fetch_usgs(): array {
 
 // ── NASA EONET (Earth Observatory Natural Event Tracker) ──────────────────────
 function fetch_eonet(): array {
-    $raw = http_get('https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=30&limit=30');
+    $raw = http_get('https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=360&limit=30');
     if (!$raw) return [];
     $data = json_decode($raw, true);
     $catMap = [
