@@ -34,3 +34,8 @@ externalPort = 3001
 [[ports]]
 localPort = 22797
 externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+VITE_NASA_API_KEY = "OcIuBY4mhj1OALarVkySqM1EUiarJDnWEj4kctCP"

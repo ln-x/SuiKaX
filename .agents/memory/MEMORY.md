@@ -1,2 +1,4 @@
 - [Orval hook options pattern](orval-hook-options.md) — Orval-generated hooks take `{ query?: UseQueryOptions }` wrapper, never bare options
 - [SuiKa type gotchas](suika-type-gotchas.md) — real generated schema field names differ significantly from assumed names
+- [World4You PHP deploy](world4you-deploy.md) — cURL required for external HTTP on shared hosting; file_get_contents may be disabled.
+- [NASA EPIC setup](nasa-epic.md) — VITE_NASA_API_KEY env var baked into Vite build; always provide DEMO_KEY fallback in code.
