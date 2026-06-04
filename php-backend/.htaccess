@@ -1,0 +1,27 @@
+# SuiKa — Web Root .htaccess
+# Place this file in the same folder as index.html on your World4You server.
+
+Options -Indexes
+RewriteEngine On
+
+# ── API routing ──────────────────────────────────────────────────────────────
+
+# Parameterised routes (must come before extension-less rewrite)
+RewriteRule ^api/sessions/([A-Za-z0-9_-]+)/?$                      api/sessions-item.php?id=$1     [QSA,L]
+RewriteRule ^api/presets/([A-Za-z0-9_-]+)/?$                       api/presets-item.php?id=$1      [QSA,L]
+RewriteRule ^api/categories/([A-Za-z0-9_-]+)/?$                    api/categories-item.php?id=$1   [QSA,L]
+RewriteRule ^api/stress-factors/([A-Za-z0-9_-]+)/?$                api/stress-factors-item.php?id=$1 [QSA,L]
+RewriteRule ^api/regulation-strategies/([A-Za-z0-9_-]+)/?$         api/regulation-strategies-item.php?id=$1 [QSA,L]
+RewriteRule ^api/my-data/([A-Za-z0-9_-]+)/([A-Za-z0-9_-]+)/?$     api/my-data-item.php?table=$1&id=$2 [QSA,L]
+
+# Map extension-less API paths to .php files
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{DOCUMENT_ROOT}/%{REQUEST_URI}.php -f
+RewriteRule ^(.+?)/?$ $1.php [L]
+
+# ── SPA fallback ─────────────────────────────────────────────────────────────
+# All non-file, non-api requests → index.html (React Router)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_URI} !^/api/
+RewriteRule ^.*$ index.html [L]
