@@ -6,7 +6,7 @@ import { useGetMe } from "@workspace/api-client-react";
 import { Globe, TreeDeciduous, Play, Heart, BarChart2, House } from "lucide-react";
 import { useTranslation } from "./lib/i18n";
 
-const AuthScreen  = React.lazy(() => import("./components/AuthScreen").then((m) => ({ default: m.AuthScreen })));
+const AuthCard    = React.lazy(() => import("./components/AuthScreen").then((m) => ({ default: m.AuthCard })));
 const EarthTab    = React.lazy(() => import("./components/EarthTab").then((m) => ({ default: m.EarthTab })));
 const LocalTab    = React.lazy(() => import("./components/LocalTab").then((m) => ({ default: m.LocalTab })));
 const ActionTab   = React.lazy(() => import("./components/ActionTab").then((m) => ({ default: m.ActionTab })));
@@ -16,9 +16,7 @@ const InsightsTab = React.lazy(() => import("./components/InsightsTab").then((m)
 function TabFallback() {
   return (
     <div className="flex items-center justify-center min-h-[40vh]">
-      <div className="flex flex-col items-center gap-4">
-        <div className="w-3 h-3 rounded-full bg-primary animate-pulse" />
-      </div>
+      <div className="w-3 h-3 rounded-full bg-primary animate-pulse" />
     </div>
   );
 }
@@ -32,8 +30,10 @@ const queryClient = new QueryClient({
   },
 });
 
-type ViewState = "loading" | "auth" | "home" | "tab";
+type ViewState = "loading" | "guest" | "home" | "tab";
 type TabId = "earth" | "local" | "action" | "health" | "insights";
+
+const PUBLIC_TABS: TabId[] = ["earth", "local"];
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -60,17 +60,21 @@ function MainApp() {
 
   const { data: user, isError, isLoading, refetch } = useGetMe();
 
+  const isLoggedIn = !!user && !isError;
+
   useEffect(() => {
     if (isLoading) {
       setView("loading");
-    } else if (isError || !user) {
-      setView("auth");
+    } else if (!isLoggedIn) {
+      // Keep current tab view if on a public tab, otherwise go to guest
+      setView((prev) => (prev === "tab" && PUBLIC_TABS.includes(activeTab)) ? "tab" : "guest");
     } else {
-      setView("home");
+      setView((prev) => prev === "guest" ? "home" : prev === "loading" ? "home" : prev);
     }
-  }, [isLoading, isError, user]);
+  }, [isLoading, isLoggedIn]);
 
   const goTab = (tab: TabId) => {
+    if (!isLoggedIn && !PUBLIC_TABS.includes(tab)) return;
     setActiveTab(tab);
     setView("tab");
   };
@@ -86,14 +90,35 @@ function MainApp() {
     );
   }
 
-  if (view === "auth") {
+  // ── Guest layout ──────────────────────────────────────────────────────────
+  if (view === "guest") {
     return (
-      <React.Suspense fallback={<TabFallback />}>
-        <AuthScreen onSuccess={() => refetch()} />
-      </React.Suspense>
+      <div className="min-h-screen flex flex-col bg-black text-white pb-20">
+        <div className="flex-1 overflow-y-auto animate-in fade-in flex items-start justify-center pt-12 px-4">
+          <React.Suspense fallback={<TabFallback />}>
+            <AuthCard onSuccess={() => { refetch(); setView("home"); }} />
+          </React.Suspense>
+        </div>
+        <GuestNav activeTab={activeTab} view={view} onTab={goTab} t={t} />
+      </div>
     );
   }
 
+  // ── Tab on public tabs while guest ────────────────────────────────────────
+  if (view === "tab" && !isLoggedIn) {
+    return (
+      <div className="min-h-screen flex flex-col bg-black text-white pb-20">
+        <div className="flex-1 overflow-y-auto animate-in fade-in">
+          <React.Suspense fallback={<TabFallback />}>
+            {activeTab === "earth" ? <EarthTab /> : <LocalTab />}
+          </React.Suspense>
+        </div>
+        <GuestNav activeTab={activeTab} view={view} onTab={goTab} t={t} />
+      </div>
+    );
+  }
+
+  // ── Logged-in layout ──────────────────────────────────────────────────────
   const renderTab = () => {
     switch (activeTab) {
       case "earth":    return <EarthTab />;
@@ -178,6 +203,42 @@ function MainApp() {
         />
       </nav>
     </div>
+  );
+}
+
+// ── Guest bottom nav (Earth + Local only, matching their logged-in positions) ─
+function GuestNav({
+  activeTab,
+  view,
+  onTab,
+  t,
+}: {
+  activeTab: TabId;
+  view: ViewState;
+  onTab: (tab: TabId) => void;
+  t: (k: string) => string;
+}) {
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 h-20 bg-black/80 backdrop-blur-xl border-t border-border/30 flex items-center justify-around px-2 z-50">
+      {/* Spacer matching Home position */}
+      <div className="w-14" />
+      <NavButton
+        icon={<Globe size={20} />}
+        label={t("nav.earth")}
+        active={view === "tab" && activeTab === "earth"}
+        onClick={() => onTab("earth")}
+      />
+      <NavButton
+        icon={<TreeDeciduous size={20} />}
+        label={t("nav.local")}
+        active={view === "tab" && activeTab === "local"}
+        onClick={() => onTab("local")}
+      />
+      {/* Spacers matching Action / Health / Insights positions */}
+      <div className="w-14" />
+      <div className="w-14" />
+      <div className="w-14" />
+    </nav>
   );
 }
 
