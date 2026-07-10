@@ -168,6 +168,11 @@ $probes = [
         'url'  => 'https://volcano.si.edu/news/WeeklyVolcanoRSS.xml',
         'note' => 'Volcanic activity feed used in Earth tab',
     ],
+    [
+        'name' => 'Copernicus EMS',
+        'url'  => 'https://rapidmapping.emergency.copernicus.eu/backend/dashboard-api/public-activations-info/?limit=1',
+        'note' => 'Emergency mapping activations feed used in Earth tab',
+    ],
 ];
 
 $results = [];

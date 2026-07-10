@@ -304,6 +304,56 @@ async function fetchWho(): Promise<unknown[]> {
   }));
 }
 
+// ── Copernicus EMS Rapid Mapping ─────────────────────────────────────────────
+const COPERNICUS_CATEGORY_MAP: Record<string, string> = {
+  Wildfire: "wildfire",
+  Flood: "flood",
+  Storm: "storm",
+  "Tropical Cyclone": "storm",
+  Earthquake: "earthquake",
+  Volcano: "volcano",
+  Drought: "drought",
+  "Man-made accidents": "other",
+  "Man-made accidents technological disasters": "other",
+};
+
+type CopernicusActivation = {
+  code: string;
+  name: string;
+  countries?: string[];
+  category?: string;
+  eventTime?: string;
+  activationTime?: string;
+  lastUpdate?: string;
+  closed?: boolean;
+};
+
+async function fetchCopernicusEms(): Promise<unknown[]> {
+  const resp = await fetch(
+    "https://rapidmapping.emergency.copernicus.eu/backend/dashboard-api/public-activations-info/?limit=30",
+    {
+      signal: withTimeout(FETCH_TIMEOUT_MS),
+      headers: { Accept: "application/json", "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)" },
+    },
+  );
+  if (!resp.ok) throw new Error(`Copernicus EMS HTTP ${resp.status}`);
+  const json = await resp.json() as { results?: CopernicusActivation[] };
+  return (json.results ?? []).map((a) => {
+    const type = COPERNICUS_CATEGORY_MAP[a.category ?? ""] ?? classifyType(a.name ?? a.category ?? "");
+    return {
+      id: `copernicus-ems-${a.code}`,
+      title: a.name || `Copernicus EMS Activation ${a.code}`,
+      type,
+      severity: a.closed ? "low" : "medium",
+      source: "Copernicus EMS",
+      publishedAt: a.activationTime ?? a.eventTime ?? a.lastUpdate ?? new Date().toISOString(),
+      description: a.category ? `${a.category} activation${a.closed ? " (closed)" : ""}` : null,
+      countries: a.countries ?? [],
+      url: `https://mapping.emergency.copernicus.eu/activations/${a.code}`,
+    };
+  });
+}
+
 // ── Route ─────────────────────────────────────────────────────────────────────
 router.get("/earth-feeds", async (req, res): Promise<void> => {
   const now = Date.now();
@@ -313,16 +363,17 @@ router.get("/earth-feeds", async (req, res): Promise<void> => {
   }
 
   // All sources in parallel — EONET is now a single request (was 3; multiple concurrent caused 503 rate-limiting)
-  const [usgsR, nwsFloodsR, nwsStormsR, nwsTsunamiR, whoR, eonetR] = await Promise.all([
+  const [usgsR, nwsFloodsR, nwsStormsR, nwsTsunamiR, whoR, eonetR, copernicusR] = await Promise.all([
     fetchWithFallback("USGS", fetchUsgs),
     fetchWithFallback("NWS Floods", fetchNwsFloods),
     fetchWithFallback("NWS Storms", fetchNwsStorms),
     fetchWithFallback("NWS Tsunami", fetchTsunami),
     fetchWithFallback("WHO", fetchWho),
     fetchWithFallback("NASA EONET", fetchEonet),
+    fetchWithFallback("Copernicus EMS", fetchCopernicusEms),
   ]);
 
-  const results = [usgsR, nwsFloodsR, nwsStormsR, nwsTsunamiR, whoR, eonetR];
+  const results = [usgsR, nwsFloodsR, nwsStormsR, nwsTsunamiR, whoR, eonetR, copernicusR];
 
   const events = results
     .flatMap((r) => r.items)

@@ -290,7 +290,42 @@ function parse_tsunami(string|false $raw): array {
     return $out;
 }
 
-// Fetch all 9 independent upstream feeds concurrently — see http_get_multi()
+// ── Copernicus EMS Rapid Mapping ────────────────────────────────────────────
+function parse_copernicus_ems(string|false $raw): array {
+    if (!$raw) return [];
+    $data = json_decode($raw, true);
+    $catMap = [
+        'Wildfire'                              => 'wildfire',
+        'Flood'                                  => 'flood',
+        'Storm'                                  => 'storm',
+        'Tropical Cyclone'                       => 'storm',
+        'Earthquake'                              => 'earthquake',
+        'Volcano'                                => 'volcano',
+        'Drought'                                => 'drought',
+        'Man-made accidents'                     => 'other',
+        'Man-made accidents technological disasters' => 'other',
+    ];
+    $out = [];
+    foreach ($data['results'] ?? [] as $a) {
+        $category = $a['category'] ?? '';
+        $type     = $catMap[$category] ?? classify_type($a['name'] ?? $category);
+        $closed   = !empty($a['closed']);
+        $out[] = [
+            'id'          => 'copernicus-ems-' . ($a['code'] ?? md5($a['name'] ?? '')),
+            'title'       => $a['name'] ?? ('Copernicus EMS Activation ' . ($a['code'] ?? '')),
+            'type'        => $type,
+            'severity'    => $closed ? 'low' : 'medium',
+            'source'      => 'Copernicus EMS',
+            'publishedAt' => $a['activationTime'] ?? ($a['eventTime'] ?? ($a['lastUpdate'] ?? gmdate('c'))),
+            'description' => $category ? ($category . ' activation' . ($closed ? ' (closed)' : '')) : null,
+            'countries'   => $a['countries'] ?? [],
+            'url'         => isset($a['code']) ? ('https://mapping.emergency.copernicus.eu/activations/' . $a['code']) : null,
+        ];
+    }
+    return $out;
+}
+
+// Fetch all 10 independent upstream feeds concurrently — see http_get_multi()
 // docblock for why this matters (sequential fetching risked exceeding the
 // host's max_execution_time and fatal-erroring the whole endpoint).
 [
@@ -303,6 +338,7 @@ function parse_tsunami(string|false $raw): array {
     $eonetClosedStormsRaw,
     $whoRaw,
     $tsunamiRaw,
+    $copernicusRaw,
 ] = http_get_multi([
     'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson',
     'https://api.weather.gov/alerts/active?event=Flood%20Warning,Flash%20Flood%20Warning,Flood%20Watch',
@@ -313,6 +349,7 @@ function parse_tsunami(string|false $raw): array {
     'https://eonet.gsfc.nasa.gov/api/v3/events?category=severeStorms&status=closed&days=360&limit=15',
     'https://www.who.int/api/news/diseaseoutbreaknews?$orderby=PublicationDateAndTime%20desc&$top=10',
     'https://api.weather.gov/alerts/active?code=TSW,TSA,TSY',
+    'https://rapidmapping.emergency.copernicus.eu/backend/dashboard-api/public-activations-info/?limit=30',
 ]);
 
 $usgs         = parse_usgs($usgsRaw);
@@ -326,8 +363,9 @@ $eonet_closed = array_merge(
 );
 $who          = parse_who($whoRaw);
 $tsunami      = parse_tsunami($tsunamiRaw);
+$copernicus   = parse_copernicus_ems($copernicusRaw);
 
-$combined = array_merge($usgs, $nws_floods, $nws_storms, $gvp, $eonet_open, $eonet_closed, $who, $tsunami);
+$combined = array_merge($usgs, $nws_floods, $nws_storms, $gvp, $eonet_open, $eonet_closed, $who, $tsunami, $copernicus);
 usort($combined, fn($a, $b) => strtotime($b['publishedAt']) - strtotime($a['publishedAt']));
 
 $json = json_encode($combined, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

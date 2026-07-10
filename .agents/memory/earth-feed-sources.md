@@ -32,6 +32,14 @@ Used by both `artifacts/api-server/src/routes/earth-feeds.ts` and the mirrored
   US/Pacific-focused and almost always empty (returns clean `features:[]`, HTTP 200) —
   rely on the empty-state UI. Prefer this over tsunami.gov atom feeds, which spam
   non-threat "information statements".
+- **Copernicus EMS Rapid Mapping** (wildfire/flood/storm/earthquake/volcano/drought/other):
+  `https://rapidmapping.emergency.copernicus.eu/backend/dashboard-api/public-activations-info/?limit=30`
+  — public, no auth, paginated JSON (`results[]` with `code`, `name`, `category`,
+  `countries`, `activationTime`/`eventTime`/`lastUpdate`, `closed`). No RSS/ArcGIS
+  endpoint actually exists publicly despite older docs suggesting otherwise —
+  verify any guessed Copernicus URL with a live fetch before trusting it, since
+  most guessed paths (`/mapping/...`, `/rss.xml`, ArcGIS MapServer) 404. Activation
+  detail page: `https://mapping.emergency.copernicus.eu/activations/{code}`.
 
 ## Broken / unusable (do not re-add without fixing)
 - GDACS `rss_7days.xml` — dead, now returns an HTML admin page, not RSS.
