@@ -5,3 +5,5 @@
 - [Earth feed sources](earth-feed-sources.md) — working/dead feeds per Earth-event category; WHO DON JSON for epidemic, NWS alerts for tsunami, GDACS/USGS/EONET for the rest.
 - [Earth feeds network constraints](earth-feeds-network.md) — GVP (403) and EONET multi-call (503) blocked from Replit server IP; use single EONET request.
 - [NASA POWER API](nasa-power-api.md) — monthly endpoint returns 422; use daily endpoint with YYYYMMDD dates, community=AG; compute mean/sum manually.
+- [React Query shared-observer loading gate bug](react-query-shared-loading-gate.md) — gating a top-level view on a shared query's raw isLoading breaks when other components remount that same query.
+- [Testing zombie-tab pollution](testing-zombie-tabs.md) — stacked runTest calls can leave old tabs open; their independent reconnects mimic a render loop. Always isolate with "close other tabs" in test plans when debugging suspected loops.

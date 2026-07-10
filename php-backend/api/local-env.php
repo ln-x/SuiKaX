@@ -18,21 +18,59 @@ const FETCH_TIMEOUT_SEC = 12;
 function fmt(float $n, int $d = 0): float { return (float) round($n, $d); }
 
 function http_get_json(string $url, array $headers = []): ?array {
-    if (!function_exists('curl_init')) return null;
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => FETCH_TIMEOUT_SEC,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_HTTPHEADER     => array_merge(['User-Agent: SuiKa-App/1.0 (burnout-recovery-companion)'], $headers),
-    ]);
-    $body = curl_exec($ch);
-    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    if ($body === false || $status < 200 || $status >= 300) return null;
-    $decoded = json_decode($body, true);
-    return is_array($decoded) ? $decoded : null;
+    $results = http_get_json_multi([$url]);
+    return $results[0];
+}
+
+// Fetches multiple URLs concurrently via curl_multi so independent upstream
+// calls (weather + air-quality, or current + historical NASA POWER windows)
+// don't stack their timeouts serially. Worst case for N URLs is ~one
+// FETCH_TIMEOUT_SEC instead of N × FETCH_TIMEOUT_SEC — this matters a lot for
+// guests on shared PHP hosting, where a slow/unreachable upstream previously
+// made the whole endpoint feel "stuck" for up to ~48s.
+// Returns a list aligned by index with $urls; each entry is the decoded JSON
+// array, or null if that request failed or wasn't valid JSON.
+function http_get_json_multi(array $urls, array $headers = []): array {
+    $count = count($urls);
+    $results = array_fill(0, $count, null);
+    if (!function_exists('curl_init') || !function_exists('curl_multi_init')) {
+        return $results;
+    }
+
+    $mh = curl_multi_init();
+    $handles = [];
+    foreach ($urls as $i => $url) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => FETCH_TIMEOUT_SEC,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTPHEADER     => array_merge(['User-Agent: SuiKa-App/1.0 (burnout-recovery-companion)'], $headers),
+        ]);
+        curl_multi_add_handle($mh, $ch);
+        $handles[$i] = $ch;
+    }
+
+    $running = null;
+    do {
+        $status = curl_multi_exec($mh, $running);
+        if ($running) curl_multi_select($mh, 1.0);
+    } while ($running && $status === CURLM_OK);
+
+    foreach ($handles as $i => $ch) {
+        $body = curl_multi_getcontent($ch);
+        $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        if ($body !== false && $body !== null && $httpStatus >= 200 && $httpStatus < 300) {
+            $decoded = json_decode($body, true);
+            $results[$i] = is_array($decoded) ? $decoded : null;
+        }
+        curl_multi_remove_handle($mh, $ch);
+        curl_close($ch);
+    }
+    curl_multi_close($mh);
+
+    return $results;
 }
 
 function daylight_desc(int $pct): string {
@@ -124,17 +162,15 @@ function prec_desc(float $pct): string {
 
 // ── Weather + air quality (Open-Meteo, 15-min cache) ─────────────────────────
 function fetch_weather(float $lat, float $lon): array {
-    $wx = http_get_json(
+    [$wx, $aq] = http_get_json_multi([
         "https://api.open-meteo.com/v1/forecast?latitude={$lat}&longitude={$lon}" .
         "&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,surface_pressure" .
-        "&daily=daylight_duration,sunshine_duration&timezone=auto&forecast_days=1"
-    );
-    $aq = http_get_json(
+        "&daily=daylight_duration,sunshine_duration&timezone=auto&forecast_days=1",
         "https://air-quality-api.open-meteo.com/v1/air-quality?latitude={$lat}&longitude={$lon}" .
         "&current=pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,european_aqi" .
         "&hourly=grass_pollen,birch_pollen,alder_pollen,mugwort_pollen,ragweed_pollen" .
-        "&forecast_days=1&timezone=auto"
-    );
+        "&forecast_days=1&timezone=auto",
+    ]);
 
     if ($wx === null || $aq === null) {
         throw new RuntimeException('Open-Meteo fetch failed');
@@ -245,8 +281,10 @@ function fetch_power(float $lat, float $lon): array {
 
     $base = "https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M,PRECTOTCORR&community=AG&longitude={$lon}&latitude={$lat}&format=JSON";
 
-    $cur = http_get_json("{$base}&start=" . power_date($d30) . "&end=" . power_date($now));
-    $hist = http_get_json("{$base}&start=" . power_date($hist5yStart) . "&end=" . power_date($hist5yEnd));
+    [$cur, $hist] = http_get_json_multi([
+        "{$base}&start=" . power_date($d30) . "&end=" . power_date($now),
+        "{$base}&start=" . power_date($hist5yStart) . "&end=" . power_date($hist5yEnd),
+    ]);
 
     if ($cur === null || $hist === null) {
         throw new RuntimeException('NASA POWER fetch failed');

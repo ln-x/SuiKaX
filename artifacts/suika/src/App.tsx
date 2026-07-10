@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -65,6 +65,19 @@ function MainApp() {
 
   const { data: user, isError, isLoading, refetch } = useGetMe();
 
+  // `useGetMe` is also called by tab components (e.g. LocalTab) to read the
+  // user's saved location. Mounting a second observer on that query triggers
+  // a background refetch, which briefly resets `isLoading` to true again even
+  // though the app already knows the guest/auth state. Gating the full-page
+  // boot spinner on raw `isLoading` therefore blanked the entire app (nav
+  // included) every time a tab mounted its own `useGetMe` call. Track whether
+  // the initial auth check has completed at least once instead, so later
+  // background refetches never hide the already-rendered UI again.
+  const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
+  useEffect(() => {
+    if (!isLoading) setHasCheckedAuth(true);
+  }, [isLoading]);
+
   const isLoggedIn = !!user && !isError;
 
   const goTab = (tab: TabId) => {
@@ -74,7 +87,7 @@ function MainApp() {
     setWantsLogin(false);
   };
 
-  if (isLoading) {
+  if (!hasCheckedAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
         <div className="flex flex-col items-center gap-4">
