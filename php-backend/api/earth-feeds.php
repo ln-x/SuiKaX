@@ -395,28 +395,44 @@ function parse_copernicus_ems(string|false $raw): array {
     'https://rapidmapping.emergency.copernicus.eu/backend/dashboard-api/public-activations-info/?limit=30',
 ]);
 
+debug_log('parsing: usgs');
 $usgs         = parse_usgs($usgsRaw);
+debug_log('parsing: nws_floods');
 $nws_floods   = parse_nws_floods($nwsFloodsRaw);
+debug_log('parsing: nws_storms');
 $nws_storms   = parse_nws_storms($nwsStormsRaw);
+debug_log('parsing: gvp');
 $gvp          = parse_gvp($gvpRaw);
+debug_log('parsing: eonet_open');
 $eonet_open   = parse_eonet($eonetOpenRaw);
+debug_log('parsing: eonet_closed');
 $eonet_closed = array_merge(
     parse_eonet($eonetClosedFloodsRaw),
     parse_eonet($eonetClosedStormsRaw),
 );
+debug_log('parsing: who');
 $who          = parse_who($whoRaw);
+debug_log('parsing: tsunami');
 $tsunami      = parse_tsunami($tsunamiRaw);
+debug_log('parsing: copernicus (raw len=' . ($copernicusRaw !== false ? strlen($copernicusRaw) : 'FALSE') . ')');
 $copernicus   = parse_copernicus_ems($copernicusRaw);
+debug_log('parsing: done, counts usgs=' . count($usgs) . ' nws_floods=' . count($nws_floods) . ' nws_storms=' . count($nws_storms)
+    . ' gvp=' . count($gvp) . ' eonet_open=' . count($eonet_open) . ' eonet_closed=' . count($eonet_closed)
+    . ' who=' . count($who) . ' tsunami=' . count($tsunami) . ' copernicus=' . count($copernicus));
 
 $combined = array_merge($usgs, $nws_floods, $nws_storms, $gvp, $eonet_open, $eonet_closed, $who, $tsunami, $copernicus);
+debug_log('sorting ' . count($combined) . ' combined events');
 usort($combined, fn($a, $b) => strtotime($b['publishedAt']) - strtotime($a['publishedAt']));
 
+debug_log('json_encode starting');
 $json = json_encode($combined, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+debug_log('json_encode done, json_last_error=' . json_last_error() . ' (' . json_last_error_msg() . '), len=' . ($json === false ? 'FALSE' : strlen($json)));
 // Only persist non-empty results — never let a transient all-feeds-failed
 // moment get cached and served as "no events" for a full 30 minutes.
 if (count($combined) > 0) {
     @file_put_contents($cacheFile, $json);
 }
 
+debug_log('echoing response, about to exit');
 echo $json;
 exit;
