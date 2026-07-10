@@ -395,6 +395,20 @@ function parse_copernicus_ems(string|false $raw): array {
     'https://rapidmapping.emergency.copernicus.eu/backend/dashboard-api/public-activations-info/?limit=30',
 ]);
 
+// Build a { name, status, count, error } entry per source, mirroring the
+// Node reference implementation's SourceStatus shape (artifacts/api-server
+// /src/routes/earth-feeds.ts) so the frontend's `data.sources` rendering
+// works identically on both backends.
+function source_status(string $name, string|false $raw, array $items): array {
+    if ($raw === false) {
+        return ['name' => $name, 'status' => 'error', 'count' => 0, 'error' => 'fetch failed'];
+    }
+    if (count($items) === 0) {
+        return ['name' => $name, 'status' => 'empty', 'count' => 0, 'error' => null];
+    }
+    return ['name' => $name, 'status' => 'ok', 'count' => count($items), 'error' => null];
+}
+
 debug_log('parsing: usgs');
 $usgs         = parse_usgs($usgsRaw);
 debug_log('parsing: nws_floods');
@@ -420,19 +434,37 @@ debug_log('parsing: done, counts usgs=' . count($usgs) . ' nws_floods=' . count(
     . ' gvp=' . count($gvp) . ' eonet_open=' . count($eonet_open) . ' eonet_closed=' . count($eonet_closed)
     . ' who=' . count($who) . ' tsunami=' . count($tsunami) . ' copernicus=' . count($copernicus));
 
+$eonet_all = array_merge($eonet_open, $eonet_closed);
+$sources = [
+    source_status('USGS', $usgsRaw, $usgs),
+    source_status('NWS Floods', $nwsFloodsRaw, $nws_floods),
+    source_status('NWS Storms', $nwsStormsRaw, $nws_storms),
+    source_status('NWS Tsunami', $tsunamiRaw, $tsunami),
+    source_status('GVP', $gvpRaw, $gvp),
+    source_status('NASA EONET', $eonetOpenRaw, $eonet_all),
+    source_status('WHO', $whoRaw, $who),
+    source_status('Copernicus EMS', $copernicusRaw, $copernicus),
+];
+
 $combined = array_merge($usgs, $nws_floods, $nws_storms, $gvp, $eonet_open, $eonet_closed, $who, $tsunami, $copernicus);
 debug_log('sorting ' . count($combined) . ' combined events');
 usort($combined, fn($a, $b) => strtotime($b['publishedAt']) - strtotime($a['publishedAt']));
 
+// The frontend (EarthTab.tsx) expects `{ events, sources }`, matching the
+// Node reference implementation's response shape — NOT a bare array. This
+// mismatch was the actual reason the site showed zero events even after
+// the earlier UTF-8/json_encode bug was fixed: the API returned valid JSON,
+// but as a plain array, so `data?.events` was always undefined client-side.
+$responseBody = ['events' => $combined, 'sources' => $sources];
+
 // Upstream feeds (GVP's RSS/XML in particular) occasionally contain bytes
 // that aren't valid UTF-8. json_encode() has no partial-failure mode — one
-// bad byte anywhere in the whole $combined tree makes the entire call
-// return false, which we'd then blindly echo as a 200-OK empty body. This
-// is exactly what caused the silent empty responses seen in production.
-// JSON_INVALID_UTF8_SUBSTITUTE swaps invalid bytes for U+FFFD instead of
-// failing the whole encode.
+// bad byte anywhere in the whole tree makes the entire call return false,
+// which we'd then blindly echo as a 200-OK empty body. This is exactly what
+// caused the silent empty responses seen in production. JSON_INVALID_UTF8_SUBSTITUTE
+// swaps invalid bytes for U+FFFD instead of failing the whole encode.
 debug_log('json_encode starting');
-$json = json_encode($combined, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+$json = json_encode($responseBody, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
 debug_log('json_encode done, json_last_error=' . json_last_error() . ' (' . json_last_error_msg() . '), len=' . ($json === false ? 'FALSE' : strlen($json)));
 
 // Belt-and-suspenders: if encoding still somehow fails, never echo `false`
