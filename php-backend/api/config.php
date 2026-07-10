@@ -15,4 +15,4 @@ define('SESSION_SECRET', 'change-this-to-a-long-random-secret-string-32chars+');
 
 // Allowed origin for CORS (your frontend domain, e.g. https://yourdomain.com)
 // Set to '*' only for local testing — never in production.
-define('CORS_ORIGIN', 'https://suika.ybermorgen.at');
+define('CORS_ORIGIN', 'https://suika.ybermorgen.org');
