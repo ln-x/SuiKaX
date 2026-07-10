@@ -15,22 +15,55 @@ if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $cacheTtl) {
     exit;
 }
 
-// ── HTTP helper — cURL preferred, file_get_contents fallback ──────────────────
-function http_get(string $url): string|false {
-    if (function_exists('curl_init')) {
+// ── HTTP helpers ────────────────────────────────────────────────────────────
+// This endpoint aggregates up to 9 independent upstream feeds (USGS, NWS x3,
+// GVP, EONET x3, WHO). Fetching them one-by-one with curl_get() could take up
+// to 9 × 12s ≈ 108s in the worst case (e.g. when GVP or EONET are slow or
+// unreachable), which exceeds the default PHP max_execution_time on most
+// shared hosts (commonly 30s) — causing the *whole* endpoint to fatal out
+// with no output, even though most feeds succeeded. curl_multi fetches all
+// URLs concurrently so the worst case is ~one timeout (12s) instead of N.
+function http_get_multi(array $urls): array {
+    $count = count($urls);
+    $results = array_fill(0, $count, false);
+    if (!function_exists('curl_multi_init')) {
+        foreach ($urls as $i => $url) {
+            $results[$i] = @file_get_contents($url);
+        }
+        return $results;
+    }
+
+    $mh = curl_multi_init();
+    $handles = [];
+    foreach ($urls as $i => $url) {
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 12,
+            CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_USERAGENT      => 'SuiKa-App/1.0 (burnout-recovery-companion)',
             CURLOPT_SSL_VERIFYPEER => true,
         ]);
-        $result = curl_exec($ch);
-        curl_close($ch);
-        return $result;
+        curl_multi_add_handle($mh, $ch);
+        $handles[$i] = $ch;
     }
-    return @file_get_contents($url);
+
+    $running = null;
+    do {
+        $status = curl_multi_exec($mh, $running);
+        if ($running) curl_multi_select($mh, 1.0);
+    } while ($running && $status === CURLM_OK);
+
+    foreach ($handles as $i => $ch) {
+        $body = curl_multi_getcontent($ch);
+        $results[$i] = ($body !== false && $body !== '') ? $body : false;
+        curl_multi_remove_handle($mh, $ch);
+        curl_close($ch);
+    }
+    curl_multi_close($mh);
+
+    return $results;
 }
 
 // ── Shared type classifier ────────────────────────────────────────────────────
@@ -48,8 +81,7 @@ function classify_type(string $title): string {
 }
 
 // ── NWS Flood Alerts ──────────────────────────────────────────────────────────
-function fetch_nws_floods(): array {
-    $raw = http_get('https://api.weather.gov/alerts/active?event=Flood%20Warning,Flash%20Flood%20Warning,Flood%20Watch');
+function parse_nws_floods(string|false $raw): array {
     if (!$raw) return [];
     $data = json_decode($raw, true);
     $out  = [];
@@ -74,8 +106,7 @@ function fetch_nws_floods(): array {
 }
 
 // ── NWS Severe Weather Alerts ─────────────────────────────────────────────────
-function fetch_nws_storms(): array {
-    $raw = http_get('https://api.weather.gov/alerts/active?event=Severe%20Thunderstorm%20Warning,Severe%20Thunderstorm%20Watch,Tornado%20Warning,Tornado%20Watch');
+function parse_nws_storms(string|false $raw): array {
     if (!$raw) return [];
     $data = json_decode($raw, true);
     $out  = [];
@@ -100,8 +131,7 @@ function fetch_nws_storms(): array {
 }
 
 // ── Smithsonian GVP Weekly Volcanic Activity Report ───────────────────────────
-function fetch_gvp(): array {
-    $xml = http_get('https://volcano.si.edu/news/WeeklyVolcanoRSS.xml');
+function parse_gvp(string|false $xml): array {
     if (!$xml) return [];
     $out = [];
     preg_match_all('/<item>([\s\S]*?)<\/item>/', $xml, $matches);
@@ -129,8 +159,7 @@ function fetch_gvp(): array {
 }
 
 // ── USGS Significant Earthquakes (past week) ──────────────────────────────────
-function fetch_usgs(): array {
-    $raw = http_get('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson');
+function parse_usgs(string|false $raw): array {
     if (!$raw) return [];
     $data = json_decode($raw, true);
     $out  = [];
@@ -193,21 +222,8 @@ function _eonet_map(array $e): array {
     ];
 }
 
-// ── NASA EONET open events ────────────────────────────────────────────────────
-function fetch_eonet_open(int $days, int $limit): array {
-    $raw = http_get("https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days={$days}&limit={$limit}");
-    if (!$raw) return [];
-    $data = json_decode($raw, true);
-    $out = [];
-    foreach ($data['events'] ?? [] as $e) {
-        $out[] = _eonet_map($e);
-    }
-    return $out;
-}
-
-// ── NASA EONET closed events by category ─────────────────────────────────────
-function fetch_eonet_closed(string $category, int $days, int $limit): array {
-    $raw = http_get("https://eonet.gsfc.nasa.gov/api/v3/events?category={$category}&status=closed&days={$days}&limit={$limit}");
+// ── NASA EONET open/closed events ──────────────────────────────────────────────
+function parse_eonet(string|false $raw): array {
     if (!$raw) return [];
     $data = json_decode($raw, true);
     $out = [];
@@ -218,8 +234,7 @@ function fetch_eonet_closed(string $category, int $days, int $limit): array {
 }
 
 // ── WHO Disease Outbreak News ─────────────────────────────────────────────────
-function fetch_who(): array {
-    $raw = http_get('https://www.who.int/api/news/diseaseoutbreaknews?$orderby=PublicationDateAndTime%20desc&$top=10');
+function parse_who(string|false $raw): array {
     if (!$raw) return [];
     $data = json_decode($raw, true);
     $out  = [];
@@ -243,8 +258,7 @@ function fetch_who(): array {
 }
 
 // ── NWS active tsunami alerts (Warning / Watch / Advisory) ─────────────────────
-function fetch_tsunami(): array {
-    $raw = http_get('https://api.weather.gov/alerts/active?code=TSW,TSA,TSY');
+function parse_tsunami(string|false $raw): array {
     if (!$raw) return [];
     $data = json_decode($raw, true);
     $out  = [];
@@ -268,17 +282,42 @@ function fetch_tsunami(): array {
     return $out;
 }
 
-$usgs         = fetch_usgs();
-$nws_floods   = fetch_nws_floods();
-$nws_storms   = fetch_nws_storms();
-$gvp          = fetch_gvp();
-$eonet_open   = fetch_eonet_open(30, 30);
+// Fetch all 9 independent upstream feeds concurrently — see http_get_multi()
+// docblock for why this matters (sequential fetching risked exceeding the
+// host's max_execution_time and fatal-erroring the whole endpoint).
+[
+    $usgsRaw,
+    $nwsFloodsRaw,
+    $nwsStormsRaw,
+    $gvpRaw,
+    $eonetOpenRaw,
+    $eonetClosedFloodsRaw,
+    $eonetClosedStormsRaw,
+    $whoRaw,
+    $tsunamiRaw,
+] = http_get_multi([
+    'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson',
+    'https://api.weather.gov/alerts/active?event=Flood%20Warning,Flash%20Flood%20Warning,Flood%20Watch',
+    'https://api.weather.gov/alerts/active?event=Severe%20Thunderstorm%20Warning,Severe%20Thunderstorm%20Watch,Tornado%20Warning,Tornado%20Watch',
+    'https://volcano.si.edu/news/WeeklyVolcanoRSS.xml',
+    'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=30&limit=30',
+    'https://eonet.gsfc.nasa.gov/api/v3/events?category=floods&status=closed&days=730&limit=20',
+    'https://eonet.gsfc.nasa.gov/api/v3/events?category=severeStorms&status=closed&days=360&limit=15',
+    'https://www.who.int/api/news/diseaseoutbreaknews?$orderby=PublicationDateAndTime%20desc&$top=10',
+    'https://api.weather.gov/alerts/active?code=TSW,TSA,TSY',
+]);
+
+$usgs         = parse_usgs($usgsRaw);
+$nws_floods   = parse_nws_floods($nwsFloodsRaw);
+$nws_storms   = parse_nws_storms($nwsStormsRaw);
+$gvp          = parse_gvp($gvpRaw);
+$eonet_open   = parse_eonet($eonetOpenRaw);
 $eonet_closed = array_merge(
-    fetch_eonet_closed('floods', 730, 20),
-    fetch_eonet_closed('severeStorms', 360, 15),
+    parse_eonet($eonetClosedFloodsRaw),
+    parse_eonet($eonetClosedStormsRaw),
 );
-$who          = fetch_who();
-$tsunami      = fetch_tsunami();
+$who          = parse_who($whoRaw);
+$tsunami      = parse_tsunami($tsunamiRaw);
 
 $combined = array_merge($usgs, $nws_floods, $nws_storms, $gvp, $eonet_open, $eonet_closed, $who, $tsunami);
 usort($combined, fn($a, $b) => strtotime($b['publishedAt']) - strtotime($a['publishedAt']));
