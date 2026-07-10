@@ -3,7 +3,8 @@ require_once __DIR__ . '/bootstrap.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') err('Method not allowed', 405);
 
-require_auth();
+// Public endpoint — Earth feeds are global data, not tied to a user account.
+// Guests must be able to load this tab, same as local-env.php.
 
 $cacheFile = sys_get_temp_dir() . '/suika_earth_feeds.json';
 $cacheTtl  = 1800;
