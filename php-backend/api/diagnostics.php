@@ -18,6 +18,52 @@ $system = [
     'timestamp_utc'  => gmdate('c'),
 ];
 
+// ── Config sanity (no secrets echoed) ───────────────────────────────────────
+
+require_once __DIR__ . '/config.php';
+
+$config_check = [
+    'db_host_set'     => defined('DB_HOST') && DB_HOST !== '',
+    'db_name_set'     => defined('DB_NAME') && DB_NAME !== '',
+    'db_user_set'     => defined('DB_USER') && DB_USER !== '',
+    'db_pass_set'     => defined('DB_PASS') && DB_PASS !== '',
+    'cors_origin'     => defined('CORS_ORIGIN') ? CORS_ORIGIN : null,
+    'request_origin'  => $_SERVER['HTTP_ORIGIN'] ?? null,
+    'request_host'    => $_SERVER['HTTP_HOST'] ?? null,
+];
+
+// ── DB connectivity test (real PDO connection, no session needed) ───────────
+
+$db_test = ['ok' => false, 'error' => null, 'user_count' => null];
+try {
+    $dsn = sprintf('mysql:host=%s;dbname=%s;charset=%s', DB_HOST, DB_NAME, DB_CHARSET);
+    $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_TIMEOUT            => 5,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    ]);
+    $stmt = $pdo->query('SELECT COUNT(*) AS c FROM users');
+    $row  = $stmt->fetch();
+    $db_test['ok']         = true;
+    $db_test['user_count'] = $row['c'] ?? null;
+} catch (\Throwable $e) {
+    $db_test['error'] = $e->getMessage();
+}
+
+// ── Session test (mirrors what bootstrap.php does when a browser hits the API) ─
+
+session_set_cookie_params(['path' => '/', 'httponly' => true, 'samesite' => 'Lax']);
+$session_test = ['ok' => false, 'error' => null, 'session_id' => null];
+try {
+    if (session_status() === PHP_SESSION_NONE) {
+        @session_start();
+    }
+    $session_test['ok']         = (session_status() === PHP_SESSION_ACTIVE);
+    $session_test['session_id'] = session_id() ?: null;
+} catch (\Throwable $e) {
+    $session_test['error'] = $e->getMessage();
+}
+
 // ── HTTP probe ────────────────────────────────────────────────────────────────
 // Returns ['reachable' => bool, 'http_status' => int|null, 'latency_ms' => float, 'error' => string|null]
 
@@ -135,8 +181,16 @@ foreach ($probes as $p) {
 $reachable_count = count(array_filter($results, fn($r) => $r['reachable']));
 $total           = count($results);
 
+$local_env_probe = probe(
+    (!empty($_SERVER['HTTPS']) ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '/api/local-env'
+);
+
 echo json_encode([
-    'system'  => $system,
+    'system'         => $system,
+    'config_check'   => $config_check,
+    'db_test'        => $db_test,
+    'session_test'   => $session_test,
+    'local_env_test' => $local_env_probe,
     'summary' => [
         'apis_reachable' => $reachable_count,
         'apis_total'     => $total,
