@@ -29,14 +29,18 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') err('Method not allowed', 405);
 $cacheFile = sys_get_temp_dir() . '/suika_earth_feeds.json';
 $cacheTtl  = 1800;
 
-// Only trust the cache if it actually decodes to a non-empty JSON array —
-// a stale/empty file (e.g. written during an earlier failure, such as the
-// now-removed auth requirement blocking every fetch) must never be served
-// blindly for up to 30 minutes just because it's "fresh" by mtime.
+// Only trust the cache if it actually decodes to the current response shape
+// — { events: [...], sources: [...] } — with a non-empty events array. This
+// deliberately rejects two kinds of stale cache: (1) a file written during
+// an earlier failure (e.g. the now-removed auth requirement blocking every
+// fetch), and (2) a file written by an older version of this script before
+// the events/sources wrapper was introduced (a bare array). Either must
+// never be served blindly for up to 30 minutes just because it's "fresh"
+// by mtime — that would silently resurrect a bug we already fixed in code.
 if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $cacheTtl) {
     $cached = file_get_contents($cacheFile);
     $decoded = $cached !== false ? json_decode($cached, true) : null;
-    if (is_array($decoded) && count($decoded) > 0) {
+    if (is_array($decoded) && isset($decoded['events']) && is_array($decoded['events']) && count($decoded['events']) > 0) {
         header('Content-Type: application/json; charset=utf-8');
         echo $cached;
         exit;
