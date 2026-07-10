@@ -424,9 +424,26 @@ $combined = array_merge($usgs, $nws_floods, $nws_storms, $gvp, $eonet_open, $eon
 debug_log('sorting ' . count($combined) . ' combined events');
 usort($combined, fn($a, $b) => strtotime($b['publishedAt']) - strtotime($a['publishedAt']));
 
+// Upstream feeds (GVP's RSS/XML in particular) occasionally contain bytes
+// that aren't valid UTF-8. json_encode() has no partial-failure mode — one
+// bad byte anywhere in the whole $combined tree makes the entire call
+// return false, which we'd then blindly echo as a 200-OK empty body. This
+// is exactly what caused the silent empty responses seen in production.
+// JSON_INVALID_UTF8_SUBSTITUTE swaps invalid bytes for U+FFFD instead of
+// failing the whole encode.
 debug_log('json_encode starting');
-$json = json_encode($combined, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+$json = json_encode($combined, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
 debug_log('json_encode done, json_last_error=' . json_last_error() . ' (' . json_last_error_msg() . '), len=' . ($json === false ? 'FALSE' : strlen($json)));
+
+// Belt-and-suspenders: if encoding still somehow fails, never echo `false`
+// as a fake 200-OK empty body again — return a real error so it's visible.
+if ($json === false) {
+    debug_log('json_encode STILL failed after substitute flag: ' . json_last_error_msg());
+    http_response_code(500);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['error' => 'Failed to encode earth feeds', 'detail' => json_last_error_msg()]);
+    exit;
+}
 // Only persist non-empty results — never let a transient all-feeds-failed
 // moment get cached and served as "no events" for a full 30 minutes.
 if (count($combined) > 0) {
