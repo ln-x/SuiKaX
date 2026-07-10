@@ -51,7 +51,19 @@ if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $cacheTtl) {
 // shared hosts (commonly 30s) — causing the *whole* endpoint to fatal out
 // with no output, even though most feeds succeeded. curl_multi fetches all
 // URLs concurrently so the worst case is ~one timeout (12s) instead of N.
-function http_get_multi(array $urls): array {
+function debug_log(string $msg): void {
+    $file = sys_get_temp_dir() . '/suika_earth_feeds_debug.log';
+    @file_put_contents($file, '[' . gmdate('c') . '] ' . $msg . "\n", FILE_APPEND);
+}
+
+// Hard wall-clock watchdog (default 20s) on top of per-handle CURLOPT_TIMEOUT.
+// Some shared-hosting FastCGI/reverse-proxy stacks kill the whole PHP process
+// on their own hard timeout *before* PHP's own error handling (and even
+// register_shutdown_function) gets a chance to run, producing a completely
+// silent empty response. Bailing out of the select loop ourselves — instead
+// of trusting curl_multi_exec()'s $running flag to reach 0 — guarantees we
+// always reach the code that builds and echoes a response.
+function http_get_multi(array $urls, int $wallClockBudgetSec = 20): array {
     $count = count($urls);
     $results = array_fill(0, $count, false);
     if (!function_exists('curl_multi_init')) {
@@ -72,16 +84,27 @@ function http_get_multi(array $urls): array {
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_USERAGENT      => 'SuiKa-App/1.0 (burnout-recovery-companion)',
             CURLOPT_SSL_VERIFYPEER => true,
+            // HTTP/2 multiplexing across many concurrent curl_multi handles
+            // has caused select()-loop hangs on some older curl/proxy combos;
+            // force HTTP/1.1 which every one of these upstream hosts supports.
+            CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
         ]);
         curl_multi_add_handle($mh, $ch);
         $handles[$i] = $ch;
     }
 
+    debug_log("http_get_multi: starting {$count} handles");
+    $start = microtime(true);
     $running = null;
     do {
         $status = curl_multi_exec($mh, $running);
         if ($running) curl_multi_select($mh, 1.0);
+        if ((microtime(true) - $start) > $wallClockBudgetSec) {
+            debug_log("http_get_multi: wall-clock budget exceeded, bailing with {$running} still running");
+            break;
+        }
     } while ($running && $status === CURLM_OK);
+    debug_log('http_get_multi: loop finished after ' . round(microtime(true) - $start, 2) . 's');
 
     foreach ($handles as $i => $ch) {
         $body = curl_multi_getcontent($ch);
