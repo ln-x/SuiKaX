@@ -229,17 +229,34 @@ function mapEonetEvent(e: EonetEvent): unknown {
 
 // Single request: recent events across all categories, open + recently closed.
 // Three separate calls were rate-limited (503) by EONET's per-IP window.
+//
+// Icebergs (category "seaLakeIce") are long-lived but eventually get marked
+// closed once they drift/melt/get archived — without a dedicated closed-events
+// call, an iceberg disappears from the feed the moment EONET closes it, even
+// though it's still a real, recent event worth surfacing (mirrors how floods
+// and severeStorms already get their own closed-events call on the PHP side).
 async function fetchEonet(): Promise<unknown[]> {
-  const resp = await fetch(
-    `https://eonet.gsfc.nasa.gov/api/v3/events?days=30&limit=50`,
-    {
+  const [openResp, closedIceResp] = await Promise.all([
+    fetch(`https://eonet.gsfc.nasa.gov/api/v3/events?days=30&limit=50`, {
       signal: withTimeout(FETCH_TIMEOUT_MS),
       headers: { Accept: "application/json", "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)" },
-    },
-  );
-  if (!resp.ok) throw new Error(`EONET HTTP ${resp.status}`);
-  const json = await resp.json() as { events?: EonetEvent[] };
-  return (json.events ?? []).map(mapEonetEvent);
+    }),
+    fetch(
+      `https://eonet.gsfc.nasa.gov/api/v3/events?category=seaLakeIce&status=closed&days=360&limit=15`,
+      {
+        signal: withTimeout(FETCH_TIMEOUT_MS),
+        headers: { Accept: "application/json", "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)" },
+      },
+    ),
+  ]);
+  if (!openResp.ok) throw new Error(`EONET HTTP ${openResp.status}`);
+  const openJson = await openResp.json() as { events?: EonetEvent[] };
+  const events = [...(openJson.events ?? [])];
+  if (closedIceResp.ok) {
+    const closedIceJson = await closedIceResp.json() as { events?: EonetEvent[] };
+    events.push(...(closedIceJson.events ?? []));
+  }
+  return events.map(mapEonetEvent);
 }
 
 // ── USGS Earthquakes ──────────────────────────────────────────────────────────

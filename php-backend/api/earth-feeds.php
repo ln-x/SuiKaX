@@ -386,6 +386,7 @@ function parse_copernicus_ems(string|false $raw): array {
     $whoRaw,
     $tsunamiRaw,
     $copernicusRaw,
+    $eonetClosedIceRaw,
 ] = http_get_multi([
     'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson',
     'https://api.weather.gov/alerts/active?event=Flood%20Warning,Flash%20Flood%20Warning,Flood%20Watch',
@@ -397,6 +398,11 @@ function parse_copernicus_ems(string|false $raw): array {
     'https://www.who.int/api/news/diseaseoutbreaknews?$orderby=PublicationDateAndTime%20desc&$top=10',
     'https://api.weather.gov/alerts/active?code=TSW,TSA,TSY',
     'https://rapidmapping.emergency.copernicus.eu/backend/dashboard-api/public-activations-info/?limit=30',
+    // Icebergs (EONET's "Sea and Lake Ice" category) are long-lived but
+    // eventually marked closed once they drift/melt/get archived — without
+    // this, an iceberg disappears from the feed the moment EONET closes it,
+    // even though it's still a real, recent event worth surfacing.
+    'https://eonet.gsfc.nasa.gov/api/v3/events?category=seaLakeIce&status=closed&days=360&limit=15',
 ]);
 
 // Build a { name, status, count, error } entry per source, mirroring the
@@ -427,6 +433,7 @@ debug_log('parsing: eonet_closed');
 $eonet_closed = array_merge(
     parse_eonet($eonetClosedFloodsRaw),
     parse_eonet($eonetClosedStormsRaw),
+    parse_eonet($eonetClosedIceRaw),
 );
 debug_log('parsing: who');
 $who          = parse_who($whoRaw);
