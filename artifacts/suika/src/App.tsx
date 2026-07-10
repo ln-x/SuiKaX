@@ -66,8 +66,9 @@ function MainApp() {
     if (isLoading) {
       setView("loading");
     } else if (!isLoggedIn) {
-      // Keep current tab view if on a public tab, otherwise go to guest
-      setView((prev) => (prev === "tab" && PUBLIC_TABS.includes(activeTab)) ? "tab" : "guest");
+      // Guests land directly on the active tab if it's public (e.g. Earth on
+      // first load), instead of always being shown the login screen first.
+      setView(PUBLIC_TABS.includes(activeTab) ? "tab" : "guest");
     } else {
       setView((prev) => prev === "guest" ? "home" : prev === "loading" ? "home" : prev);
     }
