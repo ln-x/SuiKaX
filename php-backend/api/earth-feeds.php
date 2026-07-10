@@ -9,11 +9,18 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') err('Method not allowed', 405);
 $cacheFile = sys_get_temp_dir() . '/suika_earth_feeds.json';
 $cacheTtl  = 1800;
 
+// Only trust the cache if it actually decodes to a non-empty JSON array —
+// a stale/empty file (e.g. written during an earlier failure, such as the
+// now-removed auth requirement blocking every fetch) must never be served
+// blindly for up to 30 minutes just because it's "fresh" by mtime.
 if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < $cacheTtl) {
     $cached = file_get_contents($cacheFile);
-    header('Content-Type: application/json; charset=utf-8');
-    echo $cached;
-    exit;
+    $decoded = $cached !== false ? json_decode($cached, true) : null;
+    if (is_array($decoded) && count($decoded) > 0) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo $cached;
+        exit;
+    }
 }
 
 // ── HTTP helpers ────────────────────────────────────────────────────────────
@@ -324,7 +331,11 @@ $combined = array_merge($usgs, $nws_floods, $nws_storms, $gvp, $eonet_open, $eon
 usort($combined, fn($a, $b) => strtotime($b['publishedAt']) - strtotime($a['publishedAt']));
 
 $json = json_encode($combined, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-@file_put_contents($cacheFile, $json);
+// Only persist non-empty results — never let a transient all-feeds-failed
+// moment get cached and served as "no events" for a full 30 minutes.
+if (count($combined) > 0) {
+    @file_put_contents($cacheFile, $json);
+}
 
 echo $json;
 exit;
