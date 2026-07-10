@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useGetMe } from "@workspace/api-client-react";
-import { Globe, TreeDeciduous, Play, Heart, BarChart2, House } from "lucide-react";
+import { Globe, TreeDeciduous, Play, Heart, BarChart2, House, LogIn } from "lucide-react";
 import { useTranslation } from "./lib/i18n";
 
 const AuthCard    = React.lazy(() => import("./components/AuthScreen").then((m) => ({ default: m.AuthCard })));
@@ -30,7 +30,6 @@ const queryClient = new QueryClient({
   },
 });
 
-type ViewState = "loading" | "guest" | "home" | "tab";
 type TabId = "earth" | "local" | "action" | "health" | "insights";
 
 const PUBLIC_TABS: TabId[] = ["earth", "local"];
@@ -53,8 +52,14 @@ const QUOTES = [
 ];
 
 function MainApp() {
-  const [view, setView] = useState<ViewState>("loading");
+  // `activeTab`, `wantsLogin`, and `showHome` are independent pieces of UI
+  // state driven only by explicit user actions (nav clicks). The screen shown
+  // is derived directly from these plus the live auth query on every render —
+  // there is no separate "view" state kept in sync via an effect, so there is
+  // no possibility of a state-sync feedback loop with the query.
   const [activeTab, setActiveTab] = useState<TabId>("earth");
+  const [wantsLogin, setWantsLogin] = useState(false);
+  const [showHome, setShowHome] = useState(true);
   const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)]);
   const { t } = useTranslation();
 
@@ -62,30 +67,14 @@ function MainApp() {
 
   const isLoggedIn = !!user && !isError;
 
-  useEffect(() => {
-    if (isLoading) {
-      setView("loading");
-    } else if (!isLoggedIn) {
-      // Guests land directly on the active tab if it's public (e.g. Earth on
-      // first load), instead of always being shown the login screen first.
-      setView(PUBLIC_TABS.includes(activeTab) ? "tab" : "guest");
-    } else {
-      setView((prev) => prev === "guest" ? "home" : prev === "loading" ? "home" : prev);
-    }
-  }, [isLoading, isLoggedIn]);
-
   const goTab = (tab: TabId) => {
     if (!isLoggedIn && !PUBLIC_TABS.includes(tab)) return;
-    // Tapping the already-active tab while guest → back to auth card
-    if (!isLoggedIn && view === "tab" && activeTab === tab) {
-      setView("guest");
-      return;
-    }
     setActiveTab(tab);
-    setView("tab");
+    setShowHome(false);
+    setWantsLogin(false);
   };
 
-  if (view === "loading") {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
         <div className="flex flex-col items-center gap-4">
@@ -97,29 +86,29 @@ function MainApp() {
   }
 
   // ── Guest layout ──────────────────────────────────────────────────────────
-  if (view === "guest") {
-    return (
-      <div className="min-h-screen flex flex-col bg-black text-white pb-20">
-        <div className="flex-1 overflow-y-auto animate-in fade-in flex items-start justify-center pt-12 px-4">
-          <React.Suspense fallback={<TabFallback />}>
-            <AuthCard onSuccess={() => { refetch(); setView("home"); }} />
-          </React.Suspense>
-        </div>
-        <GuestNav activeTab={activeTab} view={view} onTab={goTab} t={t} />
-      </div>
-    );
-  }
-
-  // ── Tab on public tabs while guest ────────────────────────────────────────
-  if (view === "tab" && !isLoggedIn) {
+  if (!isLoggedIn) {
     return (
       <div className="min-h-screen flex flex-col bg-black text-white pb-20">
         <div className="flex-1 overflow-y-auto animate-in fade-in">
-          <React.Suspense fallback={<TabFallback />}>
-            {activeTab === "earth" ? <EarthTab /> : <LocalTab />}
-          </React.Suspense>
+          {wantsLogin ? (
+            <div className="flex items-start justify-center pt-12 px-4">
+              <React.Suspense fallback={<TabFallback />}>
+                <AuthCard onSuccess={() => { refetch(); setShowHome(true); setWantsLogin(false); }} />
+              </React.Suspense>
+            </div>
+          ) : (
+            <React.Suspense fallback={<TabFallback />}>
+              {activeTab === "earth" ? <EarthTab /> : <LocalTab />}
+            </React.Suspense>
+          )}
         </div>
-        <GuestNav activeTab={activeTab} view={view} onTab={goTab} t={t} />
+        <GuestNav
+          activeTab={activeTab}
+          wantsLogin={wantsLogin}
+          onTab={goTab}
+          onLogin={() => setWantsLogin(true)}
+          t={t}
+        />
       </div>
     );
   }
@@ -137,7 +126,7 @@ function MainApp() {
 
   return (
     <div className="min-h-screen flex flex-col bg-black text-white pb-20">
-      {view === "home" ? (
+      {showHome ? (
         <div className="flex-1 flex flex-col px-6 pt-16 pb-6 animate-in fade-in">
           <div className="flex-1">
             <p className="text-xs text-muted-foreground tracking-widest uppercase mb-2">
@@ -174,37 +163,37 @@ function MainApp() {
         <NavButton
           icon={<House size={20} />}
           label={t("nav.home")}
-          active={view === "home"}
-          onClick={() => setView("home")}
+          active={showHome}
+          onClick={() => setShowHome(true)}
         />
         <NavButton
           icon={<Globe size={20} />}
           label={t("nav.earth")}
-          active={view === "tab" && activeTab === "earth"}
+          active={!showHome && activeTab === "earth"}
           onClick={() => goTab("earth")}
         />
         <NavButton
           icon={<TreeDeciduous size={20} />}
           label={t("nav.local")}
-          active={view === "tab" && activeTab === "local"}
+          active={!showHome && activeTab === "local"}
           onClick={() => goTab("local")}
         />
         <NavButton
           icon={<Play size={20} />}
           label={t("nav.action")}
-          active={view === "tab" && activeTab === "action"}
+          active={!showHome && activeTab === "action"}
           onClick={() => goTab("action")}
         />
         <NavButton
           icon={<Heart size={20} />}
           label={t("nav.health")}
-          active={view === "tab" && activeTab === "health"}
+          active={!showHome && activeTab === "health"}
           onClick={() => goTab("health")}
         />
         <NavButton
           icon={<BarChart2 size={20} />}
           label={t("nav.insights")}
-          active={view === "tab" && activeTab === "insights"}
+          active={!showHome && activeTab === "insights"}
           onClick={() => goTab("insights")}
         />
       </nav>
@@ -212,32 +201,38 @@ function MainApp() {
   );
 }
 
-// ── Guest bottom nav (Earth + Local only, matching their logged-in positions) ─
+// ── Guest bottom nav (Earth + Local, plus an explicit Log in entry point) ────
 function GuestNav({
   activeTab,
-  view,
+  wantsLogin,
   onTab,
+  onLogin,
   t,
 }: {
   activeTab: TabId;
-  view: ViewState;
+  wantsLogin: boolean;
   onTab: (tab: TabId) => void;
+  onLogin: () => void;
   t: (k: string) => string;
 }) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 h-20 bg-black/80 backdrop-blur-xl border-t border-border/30 flex items-center justify-around px-2 z-50">
-      {/* Spacer matching Home position */}
-      <div className="w-14" />
+      <NavButton
+        icon={<LogIn size={20} />}
+        label={t("nav.login")}
+        active={wantsLogin}
+        onClick={onLogin}
+      />
       <NavButton
         icon={<Globe size={20} />}
         label={t("nav.earth")}
-        active={view === "tab" && activeTab === "earth"}
+        active={!wantsLogin && activeTab === "earth"}
         onClick={() => onTab("earth")}
       />
       <NavButton
         icon={<TreeDeciduous size={20} />}
         label={t("nav.local")}
-        active={view === "tab" && activeTab === "local"}
+        active={!wantsLogin && activeTab === "local"}
         onClick={() => onTab("local")}
       />
       {/* Spacers matching Action / Health / Insights positions */}
