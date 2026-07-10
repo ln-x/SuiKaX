@@ -1,4 +1,24 @@
 <?php
+// Temporary diagnostic: surface any fatal error as JSON instead of a silent
+// empty response, so we can see exactly what's failing on this host. Safe to
+// keep — it never exposes anything beyond what error_get_last() reports, and
+// only fires when the script would otherwise have produced zero output.
+register_shutdown_function(function () {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        if (!headers_sent()) {
+            http_response_code(500);
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        echo json_encode([
+            'fatal_error' => true,
+            'message'     => $error['message'],
+            'file'        => $error['file'],
+            'line'        => $error['line'],
+        ]);
+    }
+});
+
 require_once __DIR__ . '/bootstrap.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') err('Method not allowed', 405);
