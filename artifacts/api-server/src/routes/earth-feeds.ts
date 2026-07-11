@@ -568,10 +568,39 @@ function makeEoFetcher(url: string, sourceName: string): () => Promise<unknown[]
   };
 }
 
+// ── Background og:image re-scrape ─────────────────────────────────────────────
+// When the aggregate cache is still valid but some null imageUrl entries have
+// had their OG_IMAGE_CACHE entries expire (10-min miss TTL < 30-min feed TTL),
+// re-scrape those URLs in the background so the next request gets fresh images.
+let ogRescrapeInFlight = false;
+
+function triggerOgRescrapeIfNeeded(): void {
+  if (!aggregateCache || ogRescrapeInFlight) return;
+
+  type EoEvent = { url: string | null; imageUrl: string | null; source: string };
+  const staleNulls = (aggregateCache.events as EoEvent[]).filter(
+    (it) =>
+      !it.imageUrl &&
+      it.url &&
+      OG_SCRAPE_SOURCES.has(it.source) &&
+      // .get() returns undefined when the entry is absent or expired —
+      // that means the 10-min null TTL has passed and a retry is warranted.
+      OG_IMAGE_CACHE.get(it.url) === undefined,
+  );
+
+  if (staleNulls.length === 0) return;
+
+  ogRescrapeInFlight = true;
+  void backfillOgImages(staleNulls).finally(() => {
+    ogRescrapeInFlight = false;
+  });
+}
+
 // ── Route ─────────────────────────────────────────────────────────────────────
 router.get("/earth-feeds", async (req, res): Promise<void> => {
   const now = Date.now();
   if (aggregateCache && now - aggregateCache.fetchedAt < CACHE_TTL_MS) {
+    triggerOgRescrapeIfNeeded();
     res.json(aggregateCache);
     return;
   }
