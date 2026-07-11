@@ -388,18 +388,27 @@ async function fetchCopernicusEms(): Promise<unknown[]> {
 }
 
 // ── ESA / Copernicus / NASA EO news feeds ─────────────────────────────────────
+function isAbsoluteHttpUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function extractRssImageUrl(content: string): string | null {
   // media:thumbnail url="..." (ESA, NASA EO feeds)
   const thumbMatch = /media:thumbnail[^>]+url=["']([^"']+)["']/i.exec(content);
-  if (thumbMatch) return thumbMatch[1];
+  if (thumbMatch && isAbsoluteHttpUrl(thumbMatch[1])) return thumbMatch[1];
   // media:content url="..." medium="image" (some Copernicus feeds)
   const mediaContent = /media:content[^>]+url=["']([^"']+)["'][^>]+medium=["']image["']/i.exec(content)
     ?? /media:content[^>]+medium=["']image["'][^>]+url=["']([^"']+)["']/i.exec(content);
-  if (mediaContent) return mediaContent[1];
+  if (mediaContent && isAbsoluteHttpUrl(mediaContent[1])) return mediaContent[1];
   // <enclosure url="..." type="image/..."/>
   const enclosure = /enclosure[^>]+url=["']([^"']+)["'][^>]+type=["']image\//i.exec(content)
     ?? /enclosure[^>]+type=["']image\/[^"']*["'][^>]+url=["']([^"']+)["']/i.exec(content);
-  if (enclosure) return enclosure[1];
+  if (enclosure && isAbsoluteHttpUrl(enclosure[1])) return enclosure[1];
   return null;
 }
 
@@ -433,7 +442,8 @@ async function fetchOgImage(articleUrl: string): Promise<string | null> {
     reader.cancel().catch(() => {});
     const m = /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i.exec(html)
       ?? /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i.exec(html);
-    const url = m ? m[1].trim() : null;
+    const rawUrl = m ? m[1].trim() : null;
+    const url = rawUrl && isAbsoluteHttpUrl(rawUrl) ? rawUrl : null;
     OG_IMAGE_CACHE.set(articleUrl, url);
     return url;
   } catch {

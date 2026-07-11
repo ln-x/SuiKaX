@@ -224,6 +224,7 @@ function EoSourceBadge({ source }: { source: string }) {
 // ── EO News card — rich card with thumbnail and source badge ───────────────────
 function EoNewsCard({ item }: { item: EarthEvent }) {
   const [imgError, setImgError] = useState(false);
+  const [imgLoading, setImgLoading] = useState(!!item.imageUrl);
   const hasImage = !!item.imageUrl && !imgError;
   const cfg = TYPE_CONFIG[item.type ?? "eo-news"] ?? TYPE_CONFIG["eo-news"];
 
@@ -234,17 +235,23 @@ function EoNewsCard({ item }: { item: EarthEvent }) {
       rel="noreferrer"
       className="block bg-card rounded-xl border border-border/40 overflow-hidden hover:border-border/70 transition-colors group"
     >
-      {hasImage && (
+      {item.imageUrl && !imgError && (
         <div className="relative w-full h-36 overflow-hidden bg-black/20">
+          {imgLoading && (
+            <div className="absolute inset-0 animate-pulse bg-white/5" />
+          )}
           <img
-            src={item.imageUrl!}
+            src={item.imageUrl}
             alt=""
-            className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+            className={`w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300 ${imgLoading ? "opacity-0" : "opacity-100"}`}
             loading="lazy"
-            onError={() => setImgError(true)}
+            onLoad={() => setImgLoading(false)}
+            onError={() => { setImgError(true); setImgLoading(false); }}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-          {item.type !== "eo-news" && (
+          {!imgLoading && (
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+          )}
+          {!imgLoading && item.type !== "eo-news" && (
             <span
               className="absolute top-2 left-2 text-xs px-1.5 py-0.5 rounded-full font-medium"
               style={{ backgroundColor: cfg.color + "dd", color: "#fff" }}
