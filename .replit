@@ -39,3 +39,6 @@ externalPort = 3000
 
 [userenv.shared]
 VITE_NASA_API_KEY = "OcIuBY4mhj1OALarVkySqM1EUiarJDnWEj4kctCP"
+
+[nix]
+channel = "stable-25_05"
