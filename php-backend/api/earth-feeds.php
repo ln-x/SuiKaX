@@ -372,7 +372,59 @@ function parse_copernicus_ems(string|false $raw): array {
     return $out;
 }
 
-// Fetch all 10 independent upstream feeds concurrently — see http_get_multi()
+// ── EO-aware type classifier ──────────────────────────────────────────────────
+// Like classify_type() but falls back to 'eo-news' instead of 'other', so
+// ESA/Copernicus/NASA editorial articles remain distinct from operational alerts.
+function classify_eo_type(string $title, string $desc): string {
+    $t = strtolower($title . ' ' . $desc);
+    if (str_contains($t, 'earthquake') || str_contains($t, 'seismic'))    return 'earthquake';
+    if (str_contains($t, 'flood'))                                         return 'flood';
+    if (str_contains($t, 'storm') || str_contains($t, 'cyclone') || str_contains($t, 'typhoon') || str_contains($t, 'hurricane')) return 'storm';
+    if (str_contains($t, 'volcano') || str_contains($t, 'volcanic'))      return 'volcano';
+    if (str_contains($t, 'drought'))                                       return 'drought';
+    if (str_contains($t, 'wildfire') || (str_contains($t, 'fire') && str_contains($t, 'forest'))) return 'wildfire';
+    if (str_contains($t, 'tsunami'))                                       return 'tsunami';
+    if (str_contains($t, 'epidemic') || str_contains($t, 'outbreak') || str_contains($t, 'disease')) return 'epidemic';
+    return 'eo-news';
+}
+
+// ── Generic RSS 2.0 parser (ESA / Copernicus / NASA EO) ───────────────────────
+function parse_eo_rss(string|false $raw, string $source): array {
+    if (!$raw) return [];
+    $out  = [];
+    $seen = [];
+    preg_match_all('/<item>([\s\S]*?)<\/item>/', $raw, $matches);
+    foreach ($matches[1] ?? [] as $content) {
+        $get = function(string $tag) use ($content): ?string {
+            if (!preg_match('/<' . preg_quote($tag, '/') . '[^>]*>([\s\S]*?)<\/' . preg_quote($tag, '/') . '>/', $content, $m)) return null;
+            $val = preg_replace('/<!\[CDATA\[|\]\]>/', '', $m[1]);
+            $val = trim(strip_tags((string)$val));
+            return $val !== '' ? $val : null;
+        };
+        $title   = $get('title') ?? 'EO News';
+        $link    = $get('link') ?? $get('guid') ?? null;
+        $pubDate = $get('pubDate') ?? null;
+        $desc    = $get('description') ?? null;
+        $key = $link ?? $title;
+        if (isset($seen[$key])) continue;
+        $seen[$key] = true;
+        $type = classify_eo_type($title, (string)$desc);
+        $out[] = [
+            'id'          => 'eo-' . substr(md5($key), 0, 10),
+            'title'       => $title,
+            'type'        => $type,
+            'severity'    => $type !== 'eo-news' ? 'medium' : 'low',
+            'source'      => $source,
+            'publishedAt' => $pubDate ? gmdate('c', (int)strtotime($pubDate)) : gmdate('c'),
+            'description' => $desc ? mb_substr(strip_tags((string)$desc), 0, 200) : null,
+            'countries'   => [],
+            'url'         => $link,
+        ];
+    }
+    return $out;
+}
+
+// Fetch all 14 independent upstream feeds concurrently — see http_get_multi()
 // docblock for why this matters (sequential fetching risked exceeding the
 // host's max_execution_time and fatal-erroring the whole endpoint).
 [
@@ -387,6 +439,10 @@ function parse_copernicus_ems(string|false $raw): array {
     $tsunamiRaw,
     $copernicusRaw,
     $eonetClosedIceRaw,
+    $eoEsaRaw,
+    $eoCopernicusRaw,
+    $eoNasaRaw,
+    $eoNasaHazardsRaw,
 ] = http_get_multi([
     'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson',
     'https://api.weather.gov/alerts/active?event=Flood%20Warning,Flash%20Flood%20Warning,Flood%20Watch',
@@ -403,6 +459,12 @@ function parse_copernicus_ems(string|false $raw): array {
     // this, an iceberg disappears from the feed the moment EONET closes it,
     // even though it's still a real, recent event worth surfacing.
     'https://eonet.gsfc.nasa.gov/api/v3/events?category=seaLakeIce&status=closed&days=360&limit=15',
+    // EO news: editorial articles from ESA, Copernicus, and NASA Earth Observatory.
+    // Natural Hazards feed may overlap with the main EO feed — deduplicated by ID below.
+    'https://www.esa.int/rssfeed/Our_Activities/Observing_the_Earth',
+    'https://www.copernicus.eu/en/rss.xml',
+    'https://earthobservatory.nasa.gov/feeds/earth-observatory.rss',
+    'https://earthobservatory.nasa.gov/feeds/natural-hazards.rss',
 ]);
 
 // Build a { name, status, count, error } entry per source, mirroring the
@@ -441,11 +503,29 @@ debug_log('parsing: tsunami');
 $tsunami      = parse_tsunami($tsunamiRaw);
 debug_log('parsing: copernicus (raw len=' . ($copernicusRaw !== false ? strlen($copernicusRaw) : 'FALSE') . ')');
 $copernicus   = parse_copernicus_ems($copernicusRaw);
+debug_log('parsing: eo_news');
+$eo_esa           = parse_eo_rss($eoEsaRaw, 'ESA');
+$eo_copernicus    = parse_eo_rss($eoCopernicusRaw, 'Copernicus');
+$eo_nasa          = parse_eo_rss($eoNasaRaw, 'NASA EO');
+$eo_nasa_hazards  = parse_eo_rss($eoNasaHazardsRaw, 'NASA EO');
+// Merge all EO feeds and deduplicate by ID (NASA EO + Natural Hazards overlap)
+$eo_all  = [];
+$eo_seen = [];
+foreach (array_merge($eo_esa, $eo_copernicus, $eo_nasa, $eo_nasa_hazards) as $item) {
+    if (!isset($eo_seen[$item['id']])) {
+        $eo_seen[$item['id']] = true;
+        $eo_all[] = $item;
+    }
+}
+$eo_all = array_slice($eo_all, 0, 30);
 debug_log('parsing: done, counts usgs=' . count($usgs) . ' nws_floods=' . count($nws_floods) . ' nws_storms=' . count($nws_storms)
     . ' gvp=' . count($gvp) . ' eonet_open=' . count($eonet_open) . ' eonet_closed=' . count($eonet_closed)
-    . ' who=' . count($who) . ' tsunami=' . count($tsunami) . ' copernicus=' . count($copernicus));
+    . ' who=' . count($who) . ' tsunami=' . count($tsunami) . ' copernicus=' . count($copernicus)
+    . ' eo_all=' . count($eo_all));
 
 $eonet_all = array_merge($eonet_open, $eonet_closed);
+// EO News: report ok if any of the 4 feeds returned items, error only if all failed
+$eo_raw_any = ($eoEsaRaw !== false || $eoCopernicusRaw !== false || $eoNasaRaw !== false || $eoNasaHazardsRaw !== false);
 $sources = [
     source_status('USGS', $usgsRaw, $usgs),
     source_status('NWS Floods', $nwsFloodsRaw, $nws_floods),
@@ -455,9 +535,15 @@ $sources = [
     source_status('NASA EONET', $eonetOpenRaw, $eonet_all),
     source_status('WHO', $whoRaw, $who),
     source_status('Copernicus EMS', $copernicusRaw, $copernicus),
+    [
+        'name'   => 'EO News',
+        'status' => count($eo_all) > 0 ? 'ok' : ($eo_raw_any ? 'empty' : 'error'),
+        'count'  => count($eo_all),
+        'error'  => $eo_raw_any ? null : 'all EO feeds failed',
+    ],
 ];
 
-$combined = array_merge($usgs, $nws_floods, $nws_storms, $gvp, $eonet_open, $eonet_closed, $who, $tsunami, $copernicus);
+$combined = array_merge($usgs, $nws_floods, $nws_storms, $gvp, $eonet_open, $eonet_closed, $who, $tsunami, $copernicus, $eo_all);
 debug_log('sorting ' . count($combined) . ' combined events');
 usort($combined, fn($a, $b) => strtotime($b['publishedAt']) - strtotime($a['publishedAt']));
 

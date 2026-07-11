@@ -3,7 +3,7 @@ import { useGetEarthFeeds } from "@workspace/api-client-react";
 import type { EarthEvent, FeedSourceStatus } from "@workspace/api-client-react";
 import {
   Globe, RefreshCw, ExternalLink, AlertCircle, ChevronDown, ChevronUp,
-  Mountain, Droplets, CloudLightning, Sun, Flame, Waves, CheckCircle2, XCircle, Clock,
+  Mountain, Droplets, CloudLightning, Sun, Flame, Waves, CheckCircle2, XCircle, Clock, Satellite,
 } from "lucide-react";
 
 // ── NASA EPIC ─────────────────────────────────────────────────────────────────
@@ -97,6 +97,7 @@ const TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color:
   wildfire:   { label: "Wildfire",   icon: <Flame size={14} />,    color: "#FF453A" },
   tsunami:    { label: "Tsunami",    icon: <Waves size={14} />,    color: "#30D5C8" },
   epidemic:   { label: "Epidemic",   icon: <AlertCircle size={14} />, color: "#AF52DE" },
+  "eo-news":  { label: "EO News",    icon: <Satellite size={14} />,   color: "#00C4FF" },
   other:      { label: "Other",      icon: <AlertCircle size={14} />, color: "#8E8E93" },
 };
 

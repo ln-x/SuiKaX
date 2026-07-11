@@ -42,6 +42,22 @@ async function fetchRetry(url: string, opts: RequestInit, retries = 1): Promise<
   return resp;
 }
 
+// ── EO-aware type classifier ──────────────────────────────────────────────────
+// Like classifyType but falls back to "eo-news" instead of "other" — keeps
+// editorial EO content distinct from true operational-alert "other" events.
+function classifyEoType(title: string, desc: string): string {
+  const t = (title + " " + desc).toLowerCase();
+  if (t.includes("earthquake") || t.includes("seismic")) return "earthquake";
+  if (t.includes("flood") || t.includes("flooding")) return "flood";
+  if (t.includes("storm") || t.includes("cyclone") || t.includes("typhoon") || t.includes("hurricane")) return "storm";
+  if (t.includes("volcano") || t.includes("volcanic")) return "volcano";
+  if (t.includes("drought")) return "drought";
+  if (t.includes("wildfire") || (t.includes("fire") && t.includes("forest"))) return "wildfire";
+  if (t.includes("tsunami")) return "tsunami";
+  if (t.includes("epidemic") || t.includes("outbreak") || t.includes("disease")) return "epidemic";
+  return "eo-news";
+}
+
 // ── Type helpers ──────────────────────────────────────────────────────────────
 function classifyType(title: string): string {
   const t = title.toLowerCase();
@@ -371,6 +387,78 @@ async function fetchCopernicusEms(): Promise<unknown[]> {
   });
 }
 
+// ── ESA / Copernicus / NASA EO news feeds ─────────────────────────────────────
+const EO_FEEDS: Array<{ url: string; source: string }> = [
+  { url: "https://www.esa.int/rssfeed/Our_Activities/Observing_the_Earth", source: "ESA" },
+  { url: "https://www.copernicus.eu/en/rss.xml",                           source: "Copernicus" },
+  { url: "https://earthobservatory.nasa.gov/feeds/earth-observatory.rss",  source: "NASA EO" },
+  { url: "https://earthobservatory.nasa.gov/feeds/natural-hazards.rss",    source: "NASA EO" },
+];
+
+function parseEoRss(xml: string, sourceName: string): unknown[] {
+  const items: unknown[] = [];
+  const seen = new Set<string>();
+  const itemRe = /<item>([\s\S]*?)<\/item>/gi;
+  const get = (content: string, tag: string): string | null => {
+    const m = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i").exec(content);
+    if (!m) return null;
+    return m[1].replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, "").trim() || null;
+  };
+  let m: RegExpExecArray | null;
+  while ((m = itemRe.exec(xml)) !== null) {
+    const content = m[1];
+    const title   = get(content, "title") ?? "EO News";
+    const link    = get(content, "link") ?? get(content, "guid") ?? null;
+    const pubDate = get(content, "pubDate") ?? null;
+    const desc    = get(content, "description") ?? null;
+    const key = link ?? title;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const type = classifyEoType(title, desc ?? "");
+    const shortDesc = desc ? desc.slice(0, 200) : null;
+    items.push({
+      id:          `eo-${createHash("md5").update(key).digest("hex").slice(0, 10)}`,
+      title,
+      type,
+      severity:    type !== "eo-news" ? "medium" : "low",
+      source:      sourceName,
+      publishedAt: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+      description: shortDesc,
+      countries:   [],
+      url:         link,
+    });
+  }
+  return items;
+}
+
+async function fetchEoNews(): Promise<unknown[]> {
+  const results = await Promise.allSettled(
+    EO_FEEDS.map(({ url, source }) =>
+      fetchRetry(
+        url,
+        {
+          signal:  withTimeout(FETCH_TIMEOUT_MS),
+          headers: { Accept: "application/rss+xml, application/xml, text/xml", "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)" },
+        },
+        1,
+      )
+        .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
+        .then((xml) => parseEoRss(xml, source)),
+    ),
+  );
+  const seen = new Set<string>();
+  const all: unknown[] = [];
+  for (const r of results) {
+    if (r.status === "fulfilled") {
+      for (const item of r.value) {
+        const id = (item as { id: string }).id;
+        if (!seen.has(id)) { seen.add(id); all.push(item); }
+      }
+    }
+  }
+  return all.slice(0, 30);
+}
+
 // ── Route ─────────────────────────────────────────────────────────────────────
 router.get("/earth-feeds", async (req, res): Promise<void> => {
   const now = Date.now();
@@ -380,7 +468,7 @@ router.get("/earth-feeds", async (req, res): Promise<void> => {
   }
 
   // All sources in parallel — EONET is now a single request (was 3; multiple concurrent caused 503 rate-limiting)
-  const [usgsR, nwsFloodsR, nwsStormsR, nwsTsunamiR, whoR, eonetR, copernicusR] = await Promise.all([
+  const [usgsR, nwsFloodsR, nwsStormsR, nwsTsunamiR, whoR, eonetR, copernicusR, eoNewsR] = await Promise.all([
     fetchWithFallback("USGS", fetchUsgs),
     fetchWithFallback("NWS Floods", fetchNwsFloods),
     fetchWithFallback("NWS Storms", fetchNwsStorms),
@@ -388,9 +476,10 @@ router.get("/earth-feeds", async (req, res): Promise<void> => {
     fetchWithFallback("WHO", fetchWho),
     fetchWithFallback("NASA EONET", fetchEonet),
     fetchWithFallback("Copernicus EMS", fetchCopernicusEms),
+    fetchWithFallback("EO News", fetchEoNews),
   ]);
 
-  const results = [usgsR, nwsFloodsR, nwsStormsR, nwsTsunamiR, whoR, eonetR, copernicusR];
+  const results = [usgsR, nwsFloodsR, nwsStormsR, nwsTsunamiR, whoR, eonetR, copernicusR, eoNewsR];
 
   const events = results
     .flatMap((r) => r.items)
