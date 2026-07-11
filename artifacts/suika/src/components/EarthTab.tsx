@@ -233,18 +233,20 @@ function EoNewsCard({ item }: { item: EarthEvent }) {
       href={item.url ?? undefined}
       target="_blank"
       rel="noreferrer"
+      data-testid="eo-news-card"
       className="block bg-card rounded-xl border border-border/40 overflow-hidden hover:border-border/70 transition-colors group"
     >
       {item.imageUrl && !imgError && (
-        <div className="relative w-full h-36 overflow-hidden bg-black/20">
+        <div data-testid="eo-news-image-container" className="relative w-full h-36 overflow-hidden bg-black/20">
           {imgLoading && (
-            <div className="absolute inset-0 animate-pulse bg-white/5" />
+            <div data-testid="eo-news-skeleton" className="absolute inset-0 animate-pulse bg-white/5" />
           )}
           <img
             src={item.imageUrl}
             alt=""
+            data-testid="eo-news-img"
             className={`w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300 ${imgLoading ? "opacity-0" : "opacity-100"}`}
-            loading="lazy"
+            loading="eager"
             onLoad={() => setImgLoading(false)}
             onError={() => { setImgError(true); setImgLoading(false); }}
           />
