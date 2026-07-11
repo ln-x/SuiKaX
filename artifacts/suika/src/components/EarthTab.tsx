@@ -273,7 +273,11 @@ export function EarthTab() {
   const visible = showAll ? filtered : filtered.slice(0, 6);
   const hasMore = filtered.length > 6;
 
-  const filterTypes = ["all", ...Object.keys(TYPE_CONFIG)] as FilterType[];
+  // eo-news appears first so satellite/observation news is a quick tap after "All"
+  const filterTypes = [
+    "all", "eo-news",
+    ...Object.keys(TYPE_CONFIG).filter((k) => k !== "eo-news"),
+  ] as FilterType[];
 
   return (
     /*
@@ -318,7 +322,7 @@ export function EarthTab() {
       {/* ── Events column ───────────────────────────────────────────────────── */}
       {/* mobile: second (natural DOM order)  |  md+: col 2, row 1–2, own scroll */}
       <div className="md:col-start-2 md:row-start-1 md:row-span-2 md:h-full md:overflow-y-auto">
-        <div className="md:max-w-2xl md:mx-auto pb-6">
+        <div className="pb-6">
 
           {/* Header */}
           <div className="flex items-center justify-between px-4 pt-5 pb-2">
@@ -338,30 +342,34 @@ export function EarthTab() {
             </button>
           </div>
 
-          {/* Source status row */}
+          {/* Source status row — outer clips, inner preserves px-4 during horizontal scroll */}
           {sources.length > 0 && (
-            <div className="flex gap-1.5 px-4 pb-3 overflow-x-auto scrollbar-none">
-              {sources.map((s) => <SourcePill key={s.name} s={s} />)}
+            <div className="overflow-x-auto scrollbar-none pb-3">
+              <div className="flex gap-1.5 px-4 min-w-max">
+                {sources.map((s) => <SourcePill key={s.name} s={s} />)}
+              </div>
             </div>
           )}
 
-          {/* Filter pills */}
-          <div className="flex gap-2 px-4 pb-3 overflow-x-auto scrollbar-none">
-            {filterTypes.map((t) => {
-              const cfg = t === "all" ? null : TYPE_CONFIG[t];
-              return (
-                <button
-                  key={t}
-                  onClick={() => { setFilter(t); setShowAll(false); }}
-                  style={filter === t ? { backgroundColor: cfg?.color ?? "var(--primary)", color: "#fff", borderColor: cfg?.color ?? "var(--primary)" } : {}}
-                  className={`shrink-0 px-3 py-1 rounded-full text-xs border transition-colors ${
-                    filter === t ? "border-transparent" : "border-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {cfg ? cfg.label : "All"}
-                </button>
-              );
-            })}
+          {/* Filter pills — same nested pattern */}
+          <div className="overflow-x-auto scrollbar-none pb-3">
+            <div className="flex gap-2 px-4 min-w-max">
+              {filterTypes.map((t) => {
+                const cfg = t === "all" ? null : TYPE_CONFIG[t];
+                return (
+                  <button
+                    key={t}
+                    onClick={() => { setFilter(t); setShowAll(false); }}
+                    style={filter === t ? { backgroundColor: cfg?.color ?? "var(--primary)", color: "#fff", borderColor: cfg?.color ?? "var(--primary)" } : {}}
+                    className={`shrink-0 px-3 py-1 rounded-full text-xs border transition-colors ${
+                      filter === t ? "border-transparent" : "border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {cfg ? cfg.label : "All"}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Events list */}
@@ -413,7 +421,7 @@ export function EarthTab() {
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Ecosystem Voices</h3>
         </div>
         {/* mobile: horizontal scroll  |  md+: 2-column grid */}
-        <div className="flex gap-3 px-4 overflow-x-auto pb-4 scrollbar-none md:grid md:grid-cols-2 md:overflow-x-visible md:pb-6">
+        <div className="flex gap-3 px-4 overflow-x-auto pb-4 scrollbar-none md:grid md:grid-cols-2 md:overflow-x-visible md:pb-6 md:px-2 md:gap-2">
           {ECOSYSTEMS.map((eco) => (
             <div key={eco.id} className="shrink-0 w-56 md:w-auto md:shrink">
               <EcosystemCard eco={eco} />
