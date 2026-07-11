@@ -393,7 +393,7 @@ export function EarthTab() {
 
       {/* ── NASA EPIC Hero ──────────────────────────────────────────────────── */}
       {/* mobile: full-width aspect-video  |  md+: col 1, row 1, fixed 260px */}
-      <div className="relative w-full aspect-video md:aspect-auto md:col-start-1 md:row-start-1 md:border-r md:border-b md:border-border/30 bg-card overflow-hidden shrink-0">
+      <div className="relative w-full aspect-video md:aspect-auto md:col-start-1 md:row-start-1 bg-card overflow-hidden shrink-0">
         {epic ? (
           <img src={epic.url} alt="Earth from DSCOVR-EPIC" className="w-full h-full object-cover" loading="lazy" />
         ) : (
