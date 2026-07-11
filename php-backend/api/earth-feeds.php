@@ -388,6 +388,117 @@ function classify_eo_type(string $title, string $desc): string {
     return 'eo-news';
 }
 
+// ── og:image scraper (ESA / Copernicus — their RSS omits images) ─────────────
+// File-based TTL cache so repeated requests within the same feed cycle skip
+// re-scraping. Mirrors Node's LruCache<string,string|null> TTL behaviour.
+define('OG_HIT_TTL',  86400); // 24h for successful hits
+define('OG_MISS_TTL',   600); // 10min for null/error misses — self-heals quickly
+
+function og_cache_get(string $url): string|null|false {
+    $file = sys_get_temp_dir() . '/suika_og_' . md5($url) . '.cache';
+    if (!file_exists($file)) return false;
+    $data = @json_decode((string)@file_get_contents($file), true);
+    if (!is_array($data) || !isset($data['expires'])) return false;
+    if (time() > (int)$data['expires']) { @unlink($file); return false; }
+    return $data['value']; // string URL (hit) or null (miss)
+}
+
+function og_cache_set(string $url, string|null $value, int $ttl): void {
+    $file = sys_get_temp_dir() . '/suika_og_' . md5($url) . '.cache';
+    @file_put_contents($file, json_encode(['value' => $value, 'expires' => time() + $ttl]));
+}
+
+function og_is_absolute_url(string $url): bool {
+    return (bool)preg_match('/^https?:\/\/.+/', $url);
+}
+
+function og_extract_from_html(string $html): ?string {
+    // property-first variant
+    if (preg_match('/<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']/', $html, $m)
+     || preg_match('/<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']/', $html, $m)) {
+        $url = trim($m[1]);
+        return og_is_absolute_url($url) ? $url : null;
+    }
+    return null;
+}
+
+// Sources whose RSS feeds omit image URLs — we scrape og:image from the article page.
+const OG_SCRAPE_SOURCES = ['ESA', 'Copernicus'];
+
+function backfill_og_images(array &$items): void {
+    // Split into cached-already and needs-fetch
+    $todo_idx  = []; // item index => article url
+    foreach ($items as $i => &$item) {
+        if ($item['imageUrl'] || !$item['url']) continue;
+        if (!in_array($item['source'], OG_SCRAPE_SOURCES, true)) continue;
+        $cached = og_cache_get($item['url']);
+        if ($cached !== false) {
+            if ($cached) $item['imageUrl'] = $cached;
+            continue;
+        }
+        $todo_idx[$i] = $item['url'];
+    }
+    unset($item);
+    if (empty($todo_idx)) return;
+
+    // Batch-fetch article pages concurrently with curl_multi.
+    // Each handle gets a write function that aborts the transfer once we have
+    // enough HTML to find <og:image> (first </head> or 20 KB) — saves bandwidth.
+    $indices = array_keys($todo_idx);
+    $urls    = array_values($todo_idx);
+    $n       = count($urls);
+    $buffers = array_fill(0, $n, '');
+
+    $mh      = curl_multi_init();
+    $handles = [];
+    for ($j = 0; $j < $n; $j++) {
+        $ch = curl_init($urls[$j]);
+        $jCapture = $j;
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => false,
+            CURLOPT_TIMEOUT        => 8,
+            CURLOPT_CONNECTTIMEOUT => 4,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_USERAGENT      => 'SuiKa-App/1.0 (burnout-recovery-companion)',
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
+            CURLOPT_WRITEFUNCTION  => function($ch, $data) use (&$buffers, $jCapture): int {
+                $buffers[$jCapture] .= $data;
+                // Abort once we reach </head> or 20 KB — og:image is always in <head>
+                if (str_contains($buffers[$jCapture], '</head>') || strlen($buffers[$jCapture]) >= 20480) {
+                    return -1; // triggers CURLE_WRITE_ERROR (23) — expected, not a real error
+                }
+                return strlen($data);
+            },
+        ]);
+        curl_multi_add_handle($mh, $ch);
+        $handles[$j] = $ch;
+    }
+
+    $start   = microtime(true);
+    $running = null;
+    do {
+        curl_multi_exec($mh, $running);
+        if ($running) curl_multi_select($mh, 0.5);
+        if ((microtime(true) - $start) > 9) break; // 9s wall-clock budget
+    } while ($running);
+
+    foreach ($handles as $j => $ch) {
+        curl_multi_remove_handle($mh, $ch);
+        curl_close($ch);
+    }
+    curl_multi_close($mh);
+
+    // Extract og:image from partial HTML, cache + apply results
+    foreach ($indices as $k => $i) {
+        $html    = $buffers[$k];
+        $imgUrl  = $html ? og_extract_from_html($html) : null;
+        og_cache_set($todo_idx[$i], $imgUrl, $imgUrl ? OG_HIT_TTL : OG_MISS_TTL);
+        if ($imgUrl) $items[$i]['imageUrl'] = $imgUrl;
+    }
+    debug_log('backfill_og_images: scraped ' . $n . ' pages, found ' . count(array_filter(array_map(fn($i) => $items[$i]['imageUrl'], $indices))) . ' images');
+}
+
 // ── Generic RSS 2.0 parser (ESA / Copernicus / NASA EO) ───────────────────────
 function parse_eo_rss(string|false $raw, string $source): array {
     if (!$raw) return [];
@@ -530,6 +641,10 @@ foreach (array_merge($eo_esa, $eo_copernicus, $eo_nasa, $eo_nasa_hazards) as $it
     }
 }
 $eo_all = array_slice($eo_all, 0, 30);
+// Scrape og:image for ESA/Copernicus items that don't have a thumbnail in RSS
+debug_log('backfill_og_images: starting');
+backfill_og_images($eo_all);
+debug_log('backfill_og_images: done');
 debug_log('parsing: done, counts usgs=' . count($usgs) . ' nws_floods=' . count($nws_floods) . ' nws_storms=' . count($nws_storms)
     . ' gvp=' . count($gvp) . ' eonet_open=' . count($eonet_open) . ' eonet_closed=' . count($eonet_closed)
     . ' who=' . count($who) . ' tsunami=' . count($tsunami) . ' copernicus=' . count($copernicus)
