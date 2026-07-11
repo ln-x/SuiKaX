@@ -412,25 +412,70 @@ function extractRssImageUrl(content: string): string | null {
   return null;
 }
 
-// ── og:image scraper with in-memory cache ─────────────────────────────────────
-// Keyed by article URL; null means "fetched but found nothing" so we don't retry.
-const OG_IMAGE_CACHE = new Map<string, string | null>();
+// ── Minimal LRU cache with per-entry TTL ──────────────────────────────────────
+interface LruEntry<V> {
+  value: V;
+  expiresAt: number;
+}
+
+class LruCache<K, V> {
+  private readonly max: number;
+  private readonly map = new Map<K, LruEntry<V>>();
+
+  constructor(max: number) {
+    this.max = max;
+  }
+
+  get(key: K): V | undefined {
+    const entry = this.map.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.map.delete(key);
+      return undefined;
+    }
+    // Refresh insertion order (LRU promotion).
+    this.map.delete(key);
+    this.map.set(key, entry);
+    return entry.value;
+  }
+
+  has(key: K): boolean {
+    return this.get(key) !== undefined;
+  }
+
+  set(key: K, value: V, ttlMs: number): void {
+    if (this.map.has(key)) this.map.delete(key);
+    else if (this.map.size >= this.max) {
+      // Evict the least-recently-used (first) entry.
+      this.map.delete(this.map.keys().next().value as K);
+    }
+    this.map.set(key, { value, expiresAt: Date.now() + ttlMs });
+  }
+}
+
+// ── og:image scraper with LRU cache ───────────────────────────────────────────
+// Max 500 entries; 24 h TTL for hits, 10 min for null/error so stale nulls self-heal.
+const OG_HIT_TTL_MS  = 24 * 60 * 60 * 1000;
+const OG_MISS_TTL_MS = 10 * 60 * 1000;
+const OG_CACHE_MAX   = 500;
+const OG_IMAGE_CACHE = new LruCache<string, string | null>(OG_CACHE_MAX);
 const OG_FETCH_TIMEOUT_MS = 8_000;
 
 // Sources whose RSS feeds omit images — we scrape og:image from the article page.
 const OG_SCRAPE_SOURCES = new Set(["ESA", "Copernicus"]);
 
 async function fetchOgImage(articleUrl: string): Promise<string | null> {
-  if (OG_IMAGE_CACHE.has(articleUrl)) return OG_IMAGE_CACHE.get(articleUrl) ?? null;
+  const cached = OG_IMAGE_CACHE.get(articleUrl);
+  if (cached !== undefined) return cached;
   try {
     const resp = await fetch(articleUrl, {
       signal: AbortSignal.timeout(OG_FETCH_TIMEOUT_MS),
       headers: { "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)", Accept: "text/html" },
     });
-    if (!resp.ok) { OG_IMAGE_CACHE.set(articleUrl, null); return null; }
+    if (!resp.ok) { OG_IMAGE_CACHE.set(articleUrl, null, OG_MISS_TTL_MS); return null; }
     // Read only the <head> portion (first 20 KB) to stay fast.
     const reader = resp.body?.getReader();
-    if (!reader) { OG_IMAGE_CACHE.set(articleUrl, null); return null; }
+    if (!reader) { OG_IMAGE_CACHE.set(articleUrl, null, OG_MISS_TTL_MS); return null; }
     const decoder = new TextDecoder();
     let html = "";
     while (html.length < 20_000) {
@@ -444,10 +489,10 @@ async function fetchOgImage(articleUrl: string): Promise<string | null> {
       ?? /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i.exec(html);
     const rawUrl = m ? m[1].trim() : null;
     const url = rawUrl && isAbsoluteHttpUrl(rawUrl) ? rawUrl : null;
-    OG_IMAGE_CACHE.set(articleUrl, url);
+    OG_IMAGE_CACHE.set(articleUrl, url, url ? OG_HIT_TTL_MS : OG_MISS_TTL_MS);
     return url;
   } catch {
-    OG_IMAGE_CACHE.set(articleUrl, null);
+    OG_IMAGE_CACHE.set(articleUrl, null, OG_MISS_TTL_MS);
     return null;
   }
 }
