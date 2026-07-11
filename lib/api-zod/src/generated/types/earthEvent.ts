@@ -5,11 +5,12 @@
  * SuiKa Burnout Recovery Companion API
  * OpenAPI spec version: 0.1.0
  */
+import type { EarthEventType } from './earthEventType';
 
 export interface EarthEvent {
   id: string;
   title: string;
-  type: string;
+  type: EarthEventType;
   severity: string;
   source: string;
   publishedAt: string;

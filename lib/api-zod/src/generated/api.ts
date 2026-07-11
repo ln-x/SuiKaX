@@ -410,7 +410,7 @@ export const GetEarthFeedsResponse = zod.object({
   "events": zod.array(zod.object({
   "id": zod.string(),
   "title": zod.string(),
-  "type": zod.string(),
+  "type": zod.enum(['earthquake', 'flood', 'storm', 'volcano', 'drought', 'wildfire', 'tsunami', 'epidemic', 'eo-news', 'other']),
   "severity": zod.string(),
   "source": zod.string(),
   "publishedAt": zod.string(),

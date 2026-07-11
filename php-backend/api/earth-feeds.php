@@ -524,8 +524,8 @@ debug_log('parsing: done, counts usgs=' . count($usgs) . ' nws_floods=' . count(
     . ' eo_all=' . count($eo_all));
 
 $eonet_all = array_merge($eonet_open, $eonet_closed);
-// EO News: report ok if any of the 4 feeds returned items, error only if all failed
-$eo_raw_any = ($eoEsaRaw !== false || $eoCopernicusRaw !== false || $eoNasaRaw !== false || $eoNasaHazardsRaw !== false);
+// Each EO RSS feed gets its own source status — independent status + stale-cache
+// slot per feed, mirroring the Node makeEoFetcher() approach.
 $sources = [
     source_status('USGS', $usgsRaw, $usgs),
     source_status('NWS Floods', $nwsFloodsRaw, $nws_floods),
@@ -535,12 +535,10 @@ $sources = [
     source_status('NASA EONET', $eonetOpenRaw, $eonet_all),
     source_status('WHO', $whoRaw, $who),
     source_status('Copernicus EMS', $copernicusRaw, $copernicus),
-    [
-        'name'   => 'EO News',
-        'status' => count($eo_all) > 0 ? 'ok' : ($eo_raw_any ? 'empty' : 'error'),
-        'count'  => count($eo_all),
-        'error'  => $eo_raw_any ? null : 'all EO feeds failed',
-    ],
+    source_status('ESA', $eoEsaRaw, $eo_esa),
+    source_status('Copernicus News', $eoCopernicusRaw, $eo_copernicus),
+    source_status('NASA EO', $eoNasaRaw, $eo_nasa),
+    source_status('NASA Hazards', $eoNasaHazardsRaw, $eo_nasa_hazards),
 ];
 
 $combined = array_merge($usgs, $nws_floods, $nws_storms, $gvp, $eonet_open, $eonet_closed, $who, $tsunami, $copernicus, $eo_all);

@@ -388,13 +388,6 @@ async function fetchCopernicusEms(): Promise<unknown[]> {
 }
 
 // ── ESA / Copernicus / NASA EO news feeds ─────────────────────────────────────
-const EO_FEEDS: Array<{ url: string; source: string }> = [
-  { url: "https://www.esa.int/rssfeed/Our_Activities/Observing_the_Earth", source: "ESA" },
-  { url: "https://www.copernicus.eu/en/rss.xml",                           source: "Copernicus" },
-  { url: "https://earthobservatory.nasa.gov/feeds/earth-observatory.rss",  source: "NASA EO" },
-  { url: "https://earthobservatory.nasa.gov/feeds/natural-hazards.rss",    source: "NASA EO" },
-];
-
 function parseEoRss(xml: string, sourceName: string): unknown[] {
   const items: unknown[] = [];
   const seen = new Set<string>();
@@ -431,32 +424,21 @@ function parseEoRss(xml: string, sourceName: string): unknown[] {
   return items;
 }
 
-async function fetchEoNews(): Promise<unknown[]> {
-  const results = await Promise.allSettled(
-    EO_FEEDS.map(({ url, source }) =>
-      fetchRetry(
-        url,
-        {
-          signal:  withTimeout(FETCH_TIMEOUT_MS),
-          headers: { Accept: "application/rss+xml, application/xml, text/xml", "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)" },
-        },
-        1,
-      )
-        .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
-        .then((xml) => parseEoRss(xml, source)),
-    ),
-  );
-  const seen = new Set<string>();
-  const all: unknown[] = [];
-  for (const r of results) {
-    if (r.status === "fulfilled") {
-      for (const item of r.value) {
-        const id = (item as { id: string }).id;
-        if (!seen.has(id)) { seen.add(id); all.push(item); }
-      }
-    }
-  }
-  return all.slice(0, 30);
+// Returns a fetcher function for a single EO RSS feed — one per source so each
+// gets its own SourceStatus entry and stale-cache slot independently.
+function makeEoFetcher(url: string, sourceName: string): () => Promise<unknown[]> {
+  return async () => {
+    const resp = await fetchRetry(
+      url,
+      {
+        signal:  withTimeout(FETCH_TIMEOUT_MS),
+        headers: { Accept: "application/rss+xml, application/xml, text/xml", "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)" },
+      },
+      1,
+    );
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return parseEoRss(await resp.text(), sourceName);
+  };
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
@@ -467,8 +449,9 @@ router.get("/earth-feeds", async (req, res): Promise<void> => {
     return;
   }
 
-  // All sources in parallel — EONET is now a single request (was 3; multiple concurrent caused 503 rate-limiting)
-  const [usgsR, nwsFloodsR, nwsStormsR, nwsTsunamiR, whoR, eonetR, copernicusR, eoNewsR] = await Promise.all([
+  // All sources in parallel — EONET is now a single request (was 3; multiple concurrent caused 503 rate-limiting).
+  // EO news feeds use makeEoFetcher so each has an independent SourceStatus and stale-cache slot.
+  const [usgsR, nwsFloodsR, nwsStormsR, nwsTsunamiR, whoR, eonetR, copernicusR, eoEsaR, eoCopernicusR, eoNasaR, eoNasaHazardsR] = await Promise.all([
     fetchWithFallback("USGS", fetchUsgs),
     fetchWithFallback("NWS Floods", fetchNwsFloods),
     fetchWithFallback("NWS Storms", fetchNwsStorms),
@@ -476,13 +459,24 @@ router.get("/earth-feeds", async (req, res): Promise<void> => {
     fetchWithFallback("WHO", fetchWho),
     fetchWithFallback("NASA EONET", fetchEonet),
     fetchWithFallback("Copernicus EMS", fetchCopernicusEms),
-    fetchWithFallback("EO News", fetchEoNews),
+    fetchWithFallback("ESA", makeEoFetcher("https://www.esa.int/rssfeed/Our_Activities/Observing_the_Earth", "ESA")),
+    fetchWithFallback("Copernicus News", makeEoFetcher("https://www.copernicus.eu/en/rss.xml", "Copernicus")),
+    fetchWithFallback("NASA EO", makeEoFetcher("https://earthobservatory.nasa.gov/feeds/earth-observatory.rss", "NASA EO")),
+    fetchWithFallback("NASA Hazards", makeEoFetcher("https://earthobservatory.nasa.gov/feeds/natural-hazards.rss", "NASA EO")),
   ]);
 
-  const results = [usgsR, nwsFloodsR, nwsStormsR, nwsTsunamiR, whoR, eonetR, copernicusR, eoNewsR];
+  const results = [usgsR, nwsFloodsR, nwsStormsR, nwsTsunamiR, whoR, eonetR, copernicusR, eoEsaR, eoCopernicusR, eoNasaR, eoNasaHazardsR];
 
+  // Deduplicate events by ID — NASA EO and NASA Hazards feeds can return overlapping articles
+  const seen = new Set<string>();
   const events = results
     .flatMap((r) => r.items)
+    .filter((e) => {
+      const id = (e as { id: string }).id;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    })
     .sort(
       (a, b) =>
         new Date((b as { publishedAt: string }).publishedAt).getTime() -

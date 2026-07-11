@@ -11,6 +11,7 @@ export * from './bodyEntry';
 export * from './category';
 export * from './categoryInput';
 export * from './earthEvent';
+export * from './earthEventType';
 export * from './earthFeedsResponse';
 export * from './environmentSnapshot';
 export * from './environmentSnapshotInput';

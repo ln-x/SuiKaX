@@ -1008,6 +1008,7 @@ components:
           type: string
         type:
           type: string
+          enum: [earthquake, flood, storm, volcano, drought, wildfire, tsunami, epidemic, eo-news, other]
         severity:
           type: string
         source:

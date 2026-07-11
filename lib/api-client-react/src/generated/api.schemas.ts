@@ -228,10 +228,26 @@ export interface FeedSourceStatus {
   error?: string | null;
 }
 
+export type EarthEventType = typeof EarthEventType[keyof typeof EarthEventType];
+
+
+export const EarthEventType = {
+  earthquake: 'earthquake',
+  flood: 'flood',
+  storm: 'storm',
+  volcano: 'volcano',
+  drought: 'drought',
+  wildfire: 'wildfire',
+  tsunami: 'tsunami',
+  epidemic: 'epidemic',
+  'eo-news': 'eo-news',
+  other: 'other',
+} as const;
+
 export interface EarthEvent {
   id: string;
   title: string;
-  type: string;
+  type: EarthEventType;
   severity: string;
   source: string;
   publishedAt: string;
