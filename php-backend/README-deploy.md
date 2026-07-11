@@ -181,3 +181,37 @@ If healthz returns a PHP error, check that `config.php` has the correct credenti
 2. Rebuild: `pnpm --filter @workspace/suika run build`
 3. FTP-upload only the changed PHP files from `php-backend/api/` and/or the rebuilt `dist/public/` files
 4. The database schema only needs to be re-imported if new tables are added
+
+---
+
+## Deploying the EO News update (Task #25/26)
+
+`php-backend/api/earth-feeds.php` was updated to add Earth Observation (EO) news from 4 RSS feeds:
+- ESA Top News — `https://www.esa.int/rssfeed/Our_Activities/Observing_the_Earth`
+- Copernicus — `https://www.copernicus.eu/en/rss.xml`
+- NASA EO — `https://earthobservatory.nasa.gov/feeds/earth-observatory.rss`
+- NASA Hazards — `https://earthobservatory.nasa.gov/feeds/natural-hazards.rss`
+
+### What changed
+- New `classify_eo_type()` function — classifies EO articles as wildfire/flood/earthquake/etc., falling back to `eo-news`
+- New `parse_eo_rss()` function — fetches and parses each RSS feed
+- 26 EO news articles are merged into the feed response alongside GDACS/ReliefWeb events
+
+### How to apply to production
+
+**Only one file needs to be uploaded:**
+
+1. Connect to World4You FTP
+2. Upload `php-backend/api/earth-feeds.php` → `/api/earth-feeds.php` on the server
+
+### Verify after upload
+
+Visit `https://yourdomain.com/api/earth-feeds` and confirm the response includes at least one item with `"type": "eo-news"`:
+
+```bash
+curl -s https://yourdomain.com/api/earth-feeds | grep -o '"type":"eo-news"' | head -3
+```
+
+Expected output: `"type":"eo-news"` (repeated 3 times).
+
+The **EO News** filter pill will then appear automatically in the Earth tab of the live site.
