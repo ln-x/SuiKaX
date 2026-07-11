@@ -222,7 +222,7 @@ function EoSourceBadge({ source }: { source: string }) {
 }
 
 // ── EO News card — rich card with thumbnail and source badge ───────────────────
-function EoNewsCard({ item }: { item: EarthEvent }) {
+export function EoNewsCard({ item }: { item: EarthEvent }) {
   const [imgError, setImgError] = useState(false);
   const [imgLoading, setImgLoading] = useState(!!item.imageUrl);
   const hasImage = !!item.imageUrl && !imgError;
