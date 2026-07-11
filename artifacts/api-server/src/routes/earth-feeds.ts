@@ -403,8 +403,63 @@ function extractRssImageUrl(content: string): string | null {
   return null;
 }
 
-function parseEoRss(xml: string, sourceName: string): unknown[] {
-  const items: unknown[] = [];
+// ── og:image scraper with in-memory cache ─────────────────────────────────────
+// Keyed by article URL; null means "fetched but found nothing" so we don't retry.
+const OG_IMAGE_CACHE = new Map<string, string | null>();
+const OG_FETCH_TIMEOUT_MS = 8_000;
+
+// Sources whose RSS feeds omit images — we scrape og:image from the article page.
+const OG_SCRAPE_SOURCES = new Set(["ESA", "Copernicus"]);
+
+async function fetchOgImage(articleUrl: string): Promise<string | null> {
+  if (OG_IMAGE_CACHE.has(articleUrl)) return OG_IMAGE_CACHE.get(articleUrl) ?? null;
+  try {
+    const resp = await fetch(articleUrl, {
+      signal: AbortSignal.timeout(OG_FETCH_TIMEOUT_MS),
+      headers: { "User-Agent": "SuiKa-App/1.0 (burnout-recovery-companion)", Accept: "text/html" },
+    });
+    if (!resp.ok) { OG_IMAGE_CACHE.set(articleUrl, null); return null; }
+    // Read only the <head> portion (first 20 KB) to stay fast.
+    const reader = resp.body?.getReader();
+    if (!reader) { OG_IMAGE_CACHE.set(articleUrl, null); return null; }
+    const decoder = new TextDecoder();
+    let html = "";
+    while (html.length < 20_000) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      html += decoder.decode(value, { stream: !done });
+      if (/<\/head>/i.test(html)) break;
+    }
+    reader.cancel().catch(() => {});
+    const m = /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i.exec(html)
+      ?? /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i.exec(html);
+    const url = m ? m[1].trim() : null;
+    OG_IMAGE_CACHE.set(articleUrl, url);
+    return url;
+  } catch {
+    OG_IMAGE_CACHE.set(articleUrl, null);
+    return null;
+  }
+}
+
+// Sources that need og:image backfill get their URLs scraped concurrently.
+async function backfillOgImages(
+  items: Array<{ url: string | null; imageUrl: string | null; source: string }>,
+): Promise<void> {
+  const pending = items.filter(
+    (it) => !it.imageUrl && it.url && OG_SCRAPE_SOURCES.has(it.source),
+  );
+  if (pending.length === 0) return;
+  await Promise.all(
+    pending.map(async (it) => {
+      const img = await fetchOgImage(it.url!);
+      if (img) it.imageUrl = img;
+    }),
+  );
+}
+
+async function parseEoRss(xml: string, sourceName: string): Promise<unknown[]> {
+  const rawItems: Array<{ url: string | null; imageUrl: string | null; source: string } & Record<string, unknown>> = [];
   const seen = new Set<string>();
   const itemRe = /<item>([\s\S]*?)<\/item>/gi;
   const get = (content: string, tag: string): string | null => {
@@ -424,8 +479,7 @@ function parseEoRss(xml: string, sourceName: string): unknown[] {
     seen.add(key);
     const type = classifyEoType(title, desc ?? "");
     const shortDesc = desc ? desc.slice(0, 200) : null;
-    const imageUrl = extractRssImageUrl(content);
-    items.push({
+    rawItems.push({
       id:          `eo-${createHash("md5").update(key).digest("hex").slice(0, 10)}`,
       title,
       type,
@@ -435,10 +489,11 @@ function parseEoRss(xml: string, sourceName: string): unknown[] {
       description: shortDesc,
       countries:   [],
       url:         link,
-      imageUrl:    imageUrl ?? null,
+      imageUrl:    extractRssImageUrl(content) ?? null,
     });
   }
-  return items;
+  await backfillOgImages(rawItems);
+  return rawItems;
 }
 
 // Returns a fetcher function for a single EO RSS feed — one per source so each
