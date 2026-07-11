@@ -467,6 +467,17 @@ router.get("/earth-feeds", async (req, res): Promise<void> => {
 
   const results = [usgsR, nwsFloodsR, nwsStormsR, nwsTsunamiR, whoR, eonetR, copernicusR, eoEsaR, eoCopernicusR, eoNasaR, eoNasaHazardsR];
 
+  // Fix EO source counts: classifyEoType() promotes some articles to crisis types (flood,
+  // wildfire, …). The source pill's count should reflect only items that stayed as "eo-news"
+  // so it matches what the user sees when they click the EO News filter pill.
+  for (const r of [eoEsaR, eoCopernicusR, eoNasaR, eoNasaHazardsR]) {
+    if (r.status.status === "ok" || r.status.status === "stale") {
+      r.status.count = r.items.filter(
+        (e) => (e as { type: string }).type === "eo-news",
+      ).length;
+    }
+  }
+
   // Deduplicate events by ID — NASA EO and NASA Hazards feeds can return overlapping articles
   const seen = new Set<string>();
   const events = results
