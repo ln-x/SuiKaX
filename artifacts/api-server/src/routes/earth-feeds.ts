@@ -388,6 +388,21 @@ async function fetchCopernicusEms(): Promise<unknown[]> {
 }
 
 // ── ESA / Copernicus / NASA EO news feeds ─────────────────────────────────────
+function extractRssImageUrl(content: string): string | null {
+  // media:thumbnail url="..." (ESA, NASA EO feeds)
+  const thumbMatch = /media:thumbnail[^>]+url=["']([^"']+)["']/i.exec(content);
+  if (thumbMatch) return thumbMatch[1];
+  // media:content url="..." medium="image" (some Copernicus feeds)
+  const mediaContent = /media:content[^>]+url=["']([^"']+)["'][^>]+medium=["']image["']/i.exec(content)
+    ?? /media:content[^>]+medium=["']image["'][^>]+url=["']([^"']+)["']/i.exec(content);
+  if (mediaContent) return mediaContent[1];
+  // <enclosure url="..." type="image/..."/>
+  const enclosure = /enclosure[^>]+url=["']([^"']+)["'][^>]+type=["']image\//i.exec(content)
+    ?? /enclosure[^>]+type=["']image\/[^"']*["'][^>]+url=["']([^"']+)["']/i.exec(content);
+  if (enclosure) return enclosure[1];
+  return null;
+}
+
 function parseEoRss(xml: string, sourceName: string): unknown[] {
   const items: unknown[] = [];
   const seen = new Set<string>();
@@ -409,6 +424,7 @@ function parseEoRss(xml: string, sourceName: string): unknown[] {
     seen.add(key);
     const type = classifyEoType(title, desc ?? "");
     const shortDesc = desc ? desc.slice(0, 200) : null;
+    const imageUrl = extractRssImageUrl(content);
     items.push({
       id:          `eo-${createHash("md5").update(key).digest("hex").slice(0, 10)}`,
       title,
@@ -419,6 +435,7 @@ function parseEoRss(xml: string, sourceName: string): unknown[] {
       description: shortDesc,
       countries:   [],
       url:         link,
+      imageUrl:    imageUrl ?? null,
     });
   }
   return items;

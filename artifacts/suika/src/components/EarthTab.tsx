@@ -200,6 +200,87 @@ function EcosystemCard({ eco }: { eco: typeof ECOSYSTEMS[number] }) {
   );
 }
 
+// ── EO source badge config ─────────────────────────────────────────────────────
+const EO_SOURCE_BADGE: Record<string, { label: string; color: string; bg: string }> = {
+  "ESA":        { label: "ESA",        color: "#00A4E4", bg: "#00A4E422" },
+  "NASA EO":    { label: "NASA EO",    color: "#FC3D21", bg: "#FC3D2122" },
+  "Copernicus": { label: "Copernicus", color: "#009B77", bg: "#009B7722" },
+};
+
+function EoSourceBadge({ source }: { source: string }) {
+  const cfg = EO_SOURCE_BADGE[source];
+  if (!cfg) return <span className="text-xs text-muted-foreground opacity-50">{source}</span>;
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded font-semibold tracking-wide"
+      style={{ color: cfg.color, backgroundColor: cfg.bg }}
+    >
+      <Satellite size={9} />
+      {cfg.label}
+    </span>
+  );
+}
+
+// ── EO News card — rich card with thumbnail and source badge ───────────────────
+function EoNewsCard({ item }: { item: EarthEvent }) {
+  const [imgError, setImgError] = useState(false);
+  const hasImage = !!item.imageUrl && !imgError;
+  const cfg = TYPE_CONFIG[item.type ?? "eo-news"] ?? TYPE_CONFIG["eo-news"];
+
+  return (
+    <a
+      href={item.url ?? undefined}
+      target="_blank"
+      rel="noreferrer"
+      className="block bg-card rounded-xl border border-border/40 overflow-hidden hover:border-border/70 transition-colors group"
+    >
+      {hasImage && (
+        <div className="relative w-full h-36 overflow-hidden bg-black/20">
+          <img
+            src={item.imageUrl!}
+            alt=""
+            className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+            loading="lazy"
+            onError={() => setImgError(true)}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+          {item.type !== "eo-news" && (
+            <span
+              className="absolute top-2 left-2 text-xs px-1.5 py-0.5 rounded-full font-medium"
+              style={{ backgroundColor: cfg.color + "dd", color: "#fff" }}
+            >
+              {cfg.label}
+            </span>
+          )}
+        </div>
+      )}
+      <div className="p-3">
+        <p className="text-sm font-medium leading-snug line-clamp-2 mb-2">{item.title}</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <EoSourceBadge source={item.source} />
+          {!hasImage && item.type !== "eo-news" && (
+            <span
+              className="text-xs px-1.5 py-0.5 rounded-full font-medium"
+              style={{ backgroundColor: cfg.color + "22", color: cfg.color }}
+            >
+              {cfg.label}
+            </span>
+          )}
+          {item.publishedAt && (
+            <span className="text-xs text-muted-foreground">{relativeTime(item.publishedAt)}</span>
+          )}
+          {item.url && (
+            <ExternalLink size={10} className="ml-auto shrink-0 text-muted-foreground opacity-40 group-hover:opacity-70 transition-opacity" />
+          )}
+        </div>
+        {item.description && (
+          <p className="text-xs text-muted-foreground mt-2 leading-relaxed line-clamp-2">{item.description}</p>
+        )}
+      </div>
+    </a>
+  );
+}
+
 // ── Event card ─────────────────────────────────────────────────────────────────
 function EventCard({ item }: { item: EarthEvent }) {
   const [expanded, setExpanded] = useState(false);
@@ -399,7 +480,11 @@ export function EarthTab() {
               </div>
             )}
 
-            {visible.map((item, i) => <EventCard key={item.id ?? i} item={item} />)}
+            {visible.map((item, i) =>
+              item.source === "ESA" || item.source === "NASA EO" || item.source === "Copernicus"
+                ? <EoNewsCard key={item.id ?? i} item={item} />
+                : <EventCard key={item.id ?? i} item={item} />
+            )}
 
             {hasMore && (
               <button

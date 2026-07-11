@@ -19,4 +19,6 @@ export interface EarthEvent {
   countries?: string[];
   /** @nullable */
   url?: string | null;
+  /** @nullable */
+  imageUrl?: string | null;
 }

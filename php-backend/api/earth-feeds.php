@@ -409,6 +409,17 @@ function parse_eo_rss(string|false $raw, string $source): array {
         if (isset($seen[$key])) continue;
         $seen[$key] = true;
         $type = classify_eo_type($title, (string)$desc);
+        // Extract thumbnail: media:thumbnail, media:content medium="image", enclosure type="image/..."
+        $imageUrl = null;
+        if (preg_match('/media:thumbnail[^>]+url=["\']([^"\']+)["\']/', $content, $tm)) {
+            $imageUrl = $tm[1];
+        } elseif (preg_match('/media:content[^>]+url=["\']([^"\']+)["\'][^>]+medium=["\']image["\']/', $content, $tm)
+               || preg_match('/media:content[^>]+medium=["\']image["\'][^>]+url=["\']([^"\']+)["\']/', $content, $tm)) {
+            $imageUrl = $tm[1];
+        } elseif (preg_match('/enclosure[^>]+url=["\']([^"\']+)["\'][^>]+type=["\']image\//', $content, $tm)
+               || preg_match('/enclosure[^>]+type=["\']image\/[^"\']*["\'][^>]+url=["\']([^"\']+)["\']/', $content, $tm)) {
+            $imageUrl = $tm[1];
+        }
         $out[] = [
             'id'          => 'eo-' . substr(md5($key), 0, 10),
             'title'       => $title,
@@ -419,6 +430,7 @@ function parse_eo_rss(string|false $raw, string $source): array {
             'description' => $desc ? mb_substr(strip_tags((string)$desc), 0, 200) : null,
             'countries'   => [],
             'url'         => $link,
+            'imageUrl'    => $imageUrl,
         ];
     }
     return $out;

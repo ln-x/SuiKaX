@@ -416,7 +416,8 @@ export const GetEarthFeedsResponse = zod.object({
   "publishedAt": zod.string(),
   "description": zod.string().nullish(),
   "countries": zod.array(zod.string()).optional(),
-  "url": zod.string().nullish()
+  "url": zod.string().nullish(),
+  "imageUrl": zod.string().nullish()
 })),
   "sources": zod.array(zod.object({
   "name": zod.string(),
