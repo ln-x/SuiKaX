@@ -276,50 +276,47 @@ export function EarthTab() {
 
   return (
     /*
-     * Layout strategy:
-     *   mobile  — single flex-col, full-width scroll
-     *   md+     — two columns side by side, each scrolling independently:
-     *             left sidebar (340px): EPIC hero + Ecosystem Voices
-     *             right column (flex-1): header + source pills + filter pills + events
+     * Layout strategy
+     * ───────────────
+     * mobile  (< md): flex-col, single scroll — DOM order = EPIC → events → ecosystem
+     * md+           : CSS grid, 2 cols × 2 rows, each cell independently scrollable
+     *
+     *   col 1 (340px)         col 2 (flex-1)
+     *   ┌─────────────────┐   ┌──────────────────────────────┐
+     *   │ EPIC hero       │   │ Events (header/pills/list)   │
+     *   │  row 1: 260px   │   │  row-span-2, own scroll      │
+     *   ├─────────────────┤   │                              │
+     *   │ Ecosystem Voice │   │                              │
+     *   │  row 2: 1fr     │   │                              │
+     *   └─────────────────┘   └──────────────────────────────┘
+     *
+     * DOM order: EPIC → events → ecosystem
+     * On mobile: flex-col respects DOM order → correct (EPIC, events, ecosystem)
+     * On md+:    grid placement via col-start/row-start overrides visual position
+     *            EPIC  → col 1 row 1, events → col 2 row 1–2, ecosystem → col 1 row 2
      */
-    <div className="h-full flex flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+    <div className="h-full flex flex-col overflow-y-auto md:grid md:grid-cols-[340px_1fr] md:grid-rows-[260px_1fr] md:overflow-hidden">
 
-      {/* ── Left sidebar ────────────────────────────────────────────────────── */}
-      <div className="md:w-[340px] md:shrink-0 md:h-full md:overflow-y-auto md:border-r md:border-border/30">
-
-        {/* NASA EPIC Hero */}
-        <div className="relative w-full aspect-video md:aspect-auto md:h-[260px] bg-card overflow-hidden shrink-0">
-          {epic ? (
-            <img src={epic.url} alt="Earth from DSCOVR-EPIC" className="w-full h-full object-cover" loading="lazy" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-blue-950 to-black">
-              <Globe size={48} className="text-blue-400 opacity-40" />
-            </div>
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-          <div className="absolute bottom-3 left-4 right-4">
-            <p className="text-xs text-white/60 italic">A living being, seen from afar</p>
-            {epic && <p className="text-xs text-white/40 mt-0.5">NASA EPIC · {epic.date}</p>}
+      {/* ── NASA EPIC Hero ──────────────────────────────────────────────────── */}
+      {/* mobile: full-width aspect-video  |  md+: col 1, row 1, fixed 260px */}
+      <div className="relative w-full aspect-video md:aspect-auto md:col-start-1 md:row-start-1 md:border-r md:border-b md:border-border/30 bg-card overflow-hidden shrink-0">
+        {epic ? (
+          <img src={epic.url} alt="Earth from DSCOVR-EPIC" className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-blue-950 to-black">
+            <Globe size={48} className="text-blue-400 opacity-40" />
           </div>
-        </div>
-
-        {/* Ecosystem Voices */}
-        <div className="px-4 pt-5 pb-1">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Ecosystem Voices</h3>
-        </div>
-
-        {/* mobile: horizontal scroll  |  md+: 2-column grid */}
-        <div className="flex gap-3 px-4 overflow-x-auto pb-4 scrollbar-none md:grid md:grid-cols-2 md:overflow-x-visible md:pb-6">
-          {ECOSYSTEMS.map((eco) => (
-            <div key={eco.id} className="shrink-0 w-56 md:w-auto md:shrink">
-              <EcosystemCard eco={eco} />
-            </div>
-          ))}
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+        <div className="absolute bottom-3 left-4 right-4">
+          <p className="text-xs text-white/60 italic">A living being, seen from afar</p>
+          {epic && <p className="text-xs text-white/40 mt-0.5">NASA EPIC · {epic.date}</p>}
         </div>
       </div>
 
-      {/* ── Right column: events ────────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 md:h-full md:overflow-y-auto">
+      {/* ── Events column ───────────────────────────────────────────────────── */}
+      {/* mobile: second (natural DOM order)  |  md+: col 2, row 1–2, own scroll */}
+      <div className="md:col-start-2 md:row-start-1 md:row-span-2 md:h-full md:overflow-y-auto">
         <div className="md:max-w-2xl md:mx-auto pb-6">
 
           {/* Header */}
@@ -405,6 +402,22 @@ export function EarthTab() {
             )}
           </div>
 
+        </div>
+      </div>
+
+      {/* ── Ecosystem Voices ────────────────────────────────────────────────── */}
+      {/* mobile: third (natural DOM order, after events)  |  md+: col 1, row 2, own scroll */}
+      <div className="md:col-start-1 md:row-start-2 md:overflow-y-auto md:border-r md:border-border/30">
+        <div className="px-4 pt-5 pb-1">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Ecosystem Voices</h3>
+        </div>
+        {/* mobile: horizontal scroll  |  md+: 2-column grid */}
+        <div className="flex gap-3 px-4 overflow-x-auto pb-4 scrollbar-none md:grid md:grid-cols-2 md:overflow-x-visible md:pb-6">
+          {ECOSYSTEMS.map((eco) => (
+            <div key={eco.id} className="shrink-0 w-56 md:w-auto md:shrink">
+              <EcosystemCard eco={eco} />
+            </div>
+          ))}
         </div>
       </div>
 
