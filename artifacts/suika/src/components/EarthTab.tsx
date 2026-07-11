@@ -363,8 +363,9 @@ export function EarthTab() {
 
   // eo-news appears first so satellite/observation news is a quick tap after "All"
   const filterTypes = [
-    "all", "eo-news",
+    "eo-news",
     ...Object.keys(TYPE_CONFIG).filter((k) => k !== "eo-news"),
+    "all",
   ] as FilterType[];
 
   return (
