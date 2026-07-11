@@ -164,6 +164,41 @@ function SourcePill({ s }: { s: FeedSourceStatus }) {
   );
 }
 
+// ── Ecosystem card ─────────────────────────────────────────────────────────────
+function EcosystemCard({ eco }: { eco: typeof ECOSYSTEMS[number] }) {
+  return (
+    <div
+      className="rounded-xl p-4 border border-border/40"
+      style={{ backgroundColor: eco.color + "0f" }}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-lg">{eco.icon}</span>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold truncate" style={{ color: eco.color }}>{eco.name}</p>
+          <p className="text-xs text-muted-foreground">{eco.status}</p>
+        </div>
+      </div>
+      <div className="space-y-1.5 mb-3">
+        {eco.metrics.map((m) => (
+          <div key={m.label} className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">{m.label}</span>
+            <span className="text-xs font-semibold tabular-nums" style={{ color: eco.color }}>{m.value}</span>
+          </div>
+        ))}
+      </div>
+      <a
+        href={eco.sourceUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors opacity-60 hover:opacity-100"
+      >
+        <ExternalLink size={9} />
+        {eco.source}
+      </a>
+    </div>
+  );
+}
+
 // ── Event card ─────────────────────────────────────────────────────────────────
 function EventCard({ item }: { item: EarthEvent }) {
   const [expanded, setExpanded] = useState(false);
@@ -240,141 +275,139 @@ export function EarthTab() {
   const filterTypes = ["all", ...Object.keys(TYPE_CONFIG)] as FilterType[];
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto pb-6">
+    /*
+     * Layout strategy:
+     *   mobile  — single flex-col, full-width scroll
+     *   md+     — two columns side by side, each scrolling independently:
+     *             left sidebar (340px): EPIC hero + Ecosystem Voices
+     *             right column (flex-1): header + source pills + filter pills + events
+     */
+    <div className="h-full flex flex-col overflow-y-auto md:flex-row md:overflow-hidden">
 
-      {/* NASA EPIC Hero */}
-      <div className="relative w-full aspect-video bg-card overflow-hidden shrink-0">
-        {epic ? (
-          <img src={epic.url} alt="Earth from DSCOVR-EPIC" className="w-full h-full object-cover" loading="lazy" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-blue-950 to-black">
-            <Globe size={48} className="text-blue-400 opacity-40" />
-          </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-        <div className="absolute bottom-3 left-4 right-4">
-          <p className="text-xs text-white/60 italic">A living being, seen from afar</p>
-          {epic && <p className="text-xs text-white/40 mt-0.5">NASA EPIC · {epic.date}</p>}
-        </div>
-      </div>
+      {/* ── Left sidebar ────────────────────────────────────────────────────── */}
+      <div className="md:w-[340px] md:shrink-0 md:h-full md:overflow-y-auto md:border-r md:border-border/30">
 
-      {/* Live events header */}
-      <div className="flex items-center justify-between px-4 pt-5 pb-2 shrink-0">
-        <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Live Global Events</h3>
-          {allItems.length > 0 && (
-            <p className="text-xs text-muted-foreground mt-0.5">{allItems.length} events across all sources</p>
+        {/* NASA EPIC Hero */}
+        <div className="relative w-full aspect-video md:aspect-auto md:h-[260px] bg-card overflow-hidden shrink-0">
+          {epic ? (
+            <img src={epic.url} alt="Earth from DSCOVR-EPIC" className="w-full h-full object-cover" loading="lazy" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-blue-950 to-black">
+              <Globe size={48} className="text-blue-400 opacity-40" />
+            </div>
           )}
-        </div>
-        <button
-          onClick={() => { setShowAll(false); refetch(); }}
-          disabled={isFetching}
-          className="p-2 rounded-full hover:bg-card transition-colors disabled:opacity-40"
-          title="Refresh feeds"
-        >
-          <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} />
-        </button>
-      </div>
-
-      {/* Source status row */}
-      {sources.length > 0 && (
-        <div className="flex gap-1.5 px-4 pb-3 overflow-x-auto scrollbar-none shrink-0">
-          {sources.map((s) => <SourcePill key={s.name} s={s} />)}
-        </div>
-      )}
-
-      {/* Filter pills */}
-      <div className="flex gap-2 px-4 pb-3 overflow-x-auto scrollbar-none shrink-0">
-        {filterTypes.map((t) => {
-          const cfg = t === "all" ? null : TYPE_CONFIG[t];
-          return (
-            <button
-              key={t}
-              onClick={() => { setFilter(t); setShowAll(false); }}
-              style={filter === t ? { backgroundColor: cfg?.color ?? "var(--primary)", color: "#fff", borderColor: cfg?.color ?? "var(--primary)" } : {}}
-              className={`shrink-0 px-3 py-1 rounded-full text-xs border transition-colors ${
-                filter === t ? "border-transparent" : "border-border text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {cfg ? cfg.label : "All"}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Events list */}
-      <div className="px-4 space-y-3">
-        {isLoading && Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-card rounded-xl p-4 animate-pulse h-20 border border-border/40" />
-        ))}
-
-        {error && (
-          <div className="text-muted-foreground text-center py-10 text-sm">
-            <AlertCircle size={24} className="mx-auto mb-3 text-orange-400" />
-            Unable to load feeds. Tap refresh to try again.
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+          <div className="absolute bottom-3 left-4 right-4">
+            <p className="text-xs text-white/60 italic">A living being, seen from afar</p>
+            {epic && <p className="text-xs text-white/40 mt-0.5">NASA EPIC · {epic.date}</p>}
           </div>
-        )}
+        </div>
 
-        {!isLoading && !error && filtered.length === 0 && (
-          <div className="text-muted-foreground text-center py-10 text-sm">
-            <Globe size={22} className="mx-auto mb-3 opacity-40" />
-            {filter === "all" ? (
-              "No global events reported right now."
-            ) : (
-              <>
-                No active {TYPE_CONFIG[filter as string]?.label.toLowerCase() ?? filter} events right now.
-                <span className="block text-xs opacity-60 mt-1">The feed is live — this category is quiet.</span>
-              </>
+        {/* Ecosystem Voices */}
+        <div className="px-4 pt-5 pb-1">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Ecosystem Voices</h3>
+        </div>
+
+        {/* mobile: horizontal scroll  |  md+: 2-column grid */}
+        <div className="flex gap-3 px-4 overflow-x-auto pb-4 scrollbar-none md:grid md:grid-cols-2 md:overflow-x-visible md:pb-6">
+          {ECOSYSTEMS.map((eco) => (
+            <div key={eco.id} className="shrink-0 w-56 md:w-auto md:shrink">
+              <EcosystemCard eco={eco} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Right column: events ────────────────────────────────────────────── */}
+      <div className="flex-1 min-w-0 md:h-full md:overflow-y-auto">
+        <div className="md:max-w-2xl md:mx-auto pb-6">
+
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 pt-5 pb-2">
+            <div>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Live Global Events</h3>
+              {allItems.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-0.5">{allItems.length} events across all sources</p>
+              )}
+            </div>
+            <button
+              onClick={() => { setShowAll(false); refetch(); }}
+              disabled={isFetching}
+              className="p-2 rounded-full hover:bg-card transition-colors disabled:opacity-40"
+              title="Refresh feeds"
+            >
+              <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} />
+            </button>
+          </div>
+
+          {/* Source status row */}
+          {sources.length > 0 && (
+            <div className="flex gap-1.5 px-4 pb-3 overflow-x-auto scrollbar-none">
+              {sources.map((s) => <SourcePill key={s.name} s={s} />)}
+            </div>
+          )}
+
+          {/* Filter pills */}
+          <div className="flex gap-2 px-4 pb-3 overflow-x-auto scrollbar-none">
+            {filterTypes.map((t) => {
+              const cfg = t === "all" ? null : TYPE_CONFIG[t];
+              return (
+                <button
+                  key={t}
+                  onClick={() => { setFilter(t); setShowAll(false); }}
+                  style={filter === t ? { backgroundColor: cfg?.color ?? "var(--primary)", color: "#fff", borderColor: cfg?.color ?? "var(--primary)" } : {}}
+                  className={`shrink-0 px-3 py-1 rounded-full text-xs border transition-colors ${
+                    filter === t ? "border-transparent" : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {cfg ? cfg.label : "All"}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Events list */}
+          <div className="px-4 space-y-3">
+            {isLoading && Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="bg-card rounded-xl p-4 animate-pulse h-20 border border-border/40" />
+            ))}
+
+            {error && (
+              <div className="text-muted-foreground text-center py-10 text-sm">
+                <AlertCircle size={24} className="mx-auto mb-3 text-orange-400" />
+                Unable to load feeds. Tap refresh to try again.
+              </div>
+            )}
+
+            {!isLoading && !error && filtered.length === 0 && (
+              <div className="text-muted-foreground text-center py-10 text-sm">
+                <Globe size={22} className="mx-auto mb-3 opacity-40" />
+                {filter === "all" ? (
+                  "No global events reported right now."
+                ) : (
+                  <>
+                    No active {TYPE_CONFIG[filter as string]?.label.toLowerCase() ?? filter} events right now.
+                    <span className="block text-xs opacity-60 mt-1">The feed is live — this category is quiet.</span>
+                  </>
+                )}
+              </div>
+            )}
+
+            {visible.map((item, i) => <EventCard key={item.id ?? i} item={item} />)}
+
+            {hasMore && (
+              <button
+                onClick={() => setShowAll((v) => !v)}
+                className="w-full py-2.5 text-xs text-muted-foreground hover:text-foreground border border-border/40 rounded-xl transition-colors"
+              >
+                {showAll ? "Show less" : `Show ${filtered.length - 6} more events`}
+              </button>
             )}
           </div>
-        )}
 
-        {visible.map((item, i) => <EventCard key={item.id ?? i} item={item} />)}
-
-        {hasMore && (
-          <button
-            onClick={() => setShowAll((v) => !v)}
-            className="w-full py-2.5 text-xs text-muted-foreground hover:text-foreground border border-border/40 rounded-xl transition-colors"
-          >
-            {showAll ? "Show less" : `Show ${filtered.length - 6} more events`}
-          </button>
-        )}
+        </div>
       </div>
 
-      {/* Ecosystem Voices */}
-      <div className="px-4 pt-6 pb-1">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Ecosystem Voices</h3>
-      </div>
-      <div className="flex gap-3 px-4 overflow-x-auto pb-1 scrollbar-none shrink-0">
-        {ECOSYSTEMS.map((eco) => (
-          <div key={eco.id} className="shrink-0 w-56 rounded-xl p-4 border border-border/40" style={{ backgroundColor: eco.color + "0f" }}>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-lg">{eco.icon}</span>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold truncate" style={{ color: eco.color }}>{eco.name}</p>
-                <p className="text-xs text-muted-foreground">{eco.status}</p>
-              </div>
-            </div>
-            <div className="space-y-1.5 mb-3">
-              {eco.metrics.map((m) => (
-                <div key={m.label} className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">{m.label}</span>
-                  <span className="text-xs font-semibold tabular-nums" style={{ color: eco.color }}>{m.value}</span>
-                </div>
-              ))}
-            </div>
-            <a
-              href={eco.sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors opacity-60 hover:opacity-100"
-            >
-              <ExternalLink size={9} />
-              {eco.source}
-            </a>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
