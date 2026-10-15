@@ -4,7 +4,7 @@
 
 # SuiKa
 
-**A minimalist burnout recovery companion — connecting personal health with planetary health.**
+**Environmental data interface — connecting personal health with planetary health.**
 
 [Live app](https://suika.ybermorgen.org) · [Deployment guide](DEPLOYMENT.md) · [Database schema](schema.sql)
 
